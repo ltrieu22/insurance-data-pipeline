@@ -1,0 +1,9 @@
+[
+  {
+    "policy_id": "P000001",
+    "customer_id": "C000001",
+    "product_code": "LIFE_BASIC",
+    "start_date": "2026-01-01",
+    "end_date": null
+  }
+]

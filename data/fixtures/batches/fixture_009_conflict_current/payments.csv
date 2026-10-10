@@ -1,0 +1,3 @@
+payment_id,policy_id,payment_date,amount,currency,source_updated_at
+PM000001,P000001,2026-09-01,130.00,EUR,2026-09-02T12:00:00Z
+PM000003,P000001,2026-09-02,40.00,EUR,2026-09-02T12:00:00Z

@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+data/generated*/
+data/fixtures/fixture_sources.zip
+/project_notes.local.md
+.env
+.env.*
+!.env.example
+
+.DS_Store
+Thumbs.db

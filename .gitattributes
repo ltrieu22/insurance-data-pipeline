@@ -1,0 +1,4 @@
+* text=auto eol=lf
+*.csv -whitespace
+*.zip binary
+*.pbix binary

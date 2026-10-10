@@ -1,0 +1,167 @@
+{
+  "purpose": "Hand-written acceptance oracle; never use this file as a pipeline source or result.",
+  "after_batches": {
+    "fixture_001_initial": {
+      "current_payment_count": 1,
+      "total_amount_eur": "100.00",
+      "amount_by_month_eur": {
+        "2026-09": "100.00"
+      },
+      "status": "SUCCESS",
+      "rejected_row_count_in_this_batch": 0,
+      "expected_reason_codes": []
+    },
+    "fixture_002_duplicate": {
+      "current_payment_count": 1,
+      "total_amount_eur": "100.00",
+      "amount_by_month_eur": {
+        "2026-09": "100.00"
+      },
+      "status": "SUCCESS",
+      "rejected_row_count_in_this_batch": 0,
+      "expected_reason_codes": []
+    },
+    "fixture_003_correction": {
+      "current_payment_count": 1,
+      "total_amount_eur": "120.00",
+      "amount_by_month_eur": {
+        "2026-09": "120.00"
+      },
+      "status": "SUCCESS",
+      "rejected_row_count_in_this_batch": 0,
+      "expected_reason_codes": []
+    },
+    "fixture_004_stale": {
+      "current_payment_count": 1,
+      "total_amount_eur": "120.00",
+      "amount_by_month_eur": {
+        "2026-09": "120.00"
+      },
+      "status": "SUCCESS",
+      "rejected_row_count_in_this_batch": 0,
+      "expected_reason_codes": []
+    },
+    "fixture_005_unknown_policy": {
+      "current_payment_count": 1,
+      "total_amount_eur": "120.00",
+      "amount_by_month_eur": {
+        "2026-09": "120.00"
+      },
+      "status": "SUCCESS_WITH_REJECTIONS",
+      "rejected_row_count_in_this_batch": 1,
+      "expected_reason_codes": [
+        "UNKNOWN_POLICY"
+      ]
+    },
+    "fixture_006_precision": {
+      "current_payment_count": 1,
+      "total_amount_eur": "120.00",
+      "amount_by_month_eur": {
+        "2026-09": "120.00"
+      },
+      "status": "SUCCESS_WITH_REJECTIONS",
+      "rejected_row_count_in_this_batch": 1,
+      "expected_reason_codes": [
+        "INVALID_AMOUNT_FORMAT"
+      ]
+    },
+    "fixture_007_late": {
+      "current_payment_count": 2,
+      "total_amount_eur": "170.00",
+      "amount_by_month_eur": {
+        "2026-08": "50.00",
+        "2026-09": "120.00"
+      },
+      "status": "SUCCESS",
+      "rejected_row_count_in_this_batch": 0,
+      "expected_reason_codes": []
+    },
+    "fixture_008_invalid_correction": {
+      "current_payment_count": 2,
+      "total_amount_eur": "170.00",
+      "amount_by_month_eur": {
+        "2026-08": "50.00",
+        "2026-09": "120.00"
+      },
+      "status": "SUCCESS_WITH_REJECTIONS",
+      "rejected_row_count_in_this_batch": 1,
+      "expected_reason_codes": [
+        "NON_POSITIVE_AMOUNT"
+      ]
+    },
+    "fixture_009_conflict_current": {
+      "current_payment_count": 2,
+      "total_amount_eur": "170.00",
+      "amount_by_month_eur": {
+        "2026-08": "50.00",
+        "2026-09": "120.00"
+      },
+      "status": "FAILED",
+      "rejected_row_count_in_this_batch": 0,
+      "expected_reason_codes": [
+        "CONFLICTING_PAYMENT_VERSION"
+      ]
+    },
+    "fixture_010_conflict_history": {
+      "current_payment_count": 2,
+      "total_amount_eur": "170.00",
+      "amount_by_month_eur": {
+        "2026-08": "50.00",
+        "2026-09": "120.00"
+      },
+      "status": "FAILED",
+      "rejected_row_count_in_this_batch": 0,
+      "expected_reason_codes": [
+        "CONFLICTING_PAYMENT_VERSION"
+      ]
+    },
+    "fixture_011_missing_column": {
+      "current_payment_count": 2,
+      "total_amount_eur": "170.00",
+      "amount_by_month_eur": {
+        "2026-08": "50.00",
+        "2026-09": "120.00"
+      },
+      "status": "FAILED",
+      "rejected_row_count_in_this_batch": 0,
+      "expected_reason_codes": [
+        "MISSING_REQUIRED_COLUMN"
+      ]
+    },
+    "fixture_012_empty": {
+      "current_payment_count": 2,
+      "total_amount_eur": "170.00",
+      "amount_by_month_eur": {
+        "2026-08": "50.00",
+        "2026-09": "120.00"
+      },
+      "status": "SUCCESS",
+      "rejected_row_count_in_this_batch": 0,
+      "expected_reason_codes": []
+    },
+    "fixture_013_normalized_duplicate": {
+      "current_payment_count": 2,
+      "total_amount_eur": "170.00",
+      "amount_by_month_eur": {
+        "2026-08": "50.00",
+        "2026-09": "120.00"
+      },
+      "status": "SUCCESS",
+      "rejected_row_count_in_this_batch": 0,
+      "expected_reason_codes": []
+    },
+    "fixture_014_recovered": {
+      "current_payment_count": 3,
+      "total_amount_eur": "230.00",
+      "amount_by_month_eur": {
+        "2026-08": "50.00",
+        "2026-09": "180.00"
+      },
+      "status": "SUCCESS",
+      "rejected_row_count_in_this_batch": 0,
+      "expected_reason_codes": []
+    }
+  },
+  "replay_check": "Replay fixture_001_initial immediately after its first run: count 1, EUR 100.00. After the full sequence, replay all previously successful batches: count 3, EUR 230.00.",
+  "counting_note": "rejected_row_count_in_this_batch counts row-validation rejections only. Fatal file/version conflicts are batch failures and carry separate reason codes."
+}

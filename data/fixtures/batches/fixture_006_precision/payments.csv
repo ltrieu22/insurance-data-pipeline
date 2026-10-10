@@ -1,0 +1,2 @@
+payment_id,policy_id,payment_date,amount,currency,source_updated_at
+BAD_PRECISION,P000001,2026-09-02,12.345,EUR,2026-09-02T12:00:00Z

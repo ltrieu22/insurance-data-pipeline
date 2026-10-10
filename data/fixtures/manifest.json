@@ -1,0 +1,164 @@
+{
+  "schema_version": 1,
+  "dataset": "insurance_premium_fixture",
+  "synthetic": true,
+  "baseline": {
+    "batch_id": "fixture_reference_v1",
+    "batch_as_of_utc": "2026-09-02T00:00:00Z",
+    "files": {
+      "customers": {
+        "path": "reference/customers.csv",
+        "row_count": 1,
+        "sha256": "4ea8a3fb745d0f5ea5fa9b52b118979bcedaa468ef9157ef6f1dcc71295b5acb"
+      },
+      "policies": {
+        "path": "reference/policies.json",
+        "row_count": 1,
+        "sha256": "bc54b4778ed7b3603327b7a871fe582b9db81d3bf5faac096b625ea216703c9e"
+      }
+    }
+  },
+  "batches": [
+    {
+      "batch_id": "fixture_001_initial",
+      "batch_as_of_utc": "2026-09-02T00:00:00Z",
+      "description": "Insert the first payment.",
+      "file": {
+        "path": "batches/fixture_001_initial/payments.csv",
+        "row_count": 1,
+        "sha256": "51f5e7e0c787b87769e9eb6e0368f800151b9c0737f3528ce2090472578afafa"
+      }
+    },
+    {
+      "batch_id": "fixture_002_duplicate",
+      "batch_as_of_utc": "2026-09-02T00:00:00Z",
+      "description": "Repeat an accepted version twice; do not count it again.",
+      "file": {
+        "path": "batches/fixture_002_duplicate/payments.csv",
+        "row_count": 2,
+        "sha256": "eb471d204af2198f23555c5885d020f3a050d76bf489d108ce8e085bbcaeaf94"
+      }
+    },
+    {
+      "batch_id": "fixture_003_correction",
+      "batch_as_of_utc": "2026-09-03T00:00:00Z",
+      "description": "A newer source version changes EUR 100.00 to EUR 120.00.",
+      "file": {
+        "path": "batches/fixture_003_correction/payments.csv",
+        "row_count": 1,
+        "sha256": "3ba83d2d0511cd06572d041620cee67af24c7bd9663e1deb96e872274b662352"
+      }
+    },
+    {
+      "batch_id": "fixture_004_stale",
+      "batch_as_of_utc": "2026-09-03T00:00:00Z",
+      "description": "The older version must not overwrite the correction.",
+      "file": {
+        "path": "batches/fixture_004_stale/payments.csv",
+        "row_count": 1,
+        "sha256": "51f5e7e0c787b87769e9eb6e0368f800151b9c0737f3528ce2090472578afafa"
+      }
+    },
+    {
+      "batch_id": "fixture_005_unknown_policy",
+      "batch_as_of_utc": "2026-09-03T00:00:00Z",
+      "description": "Retain the invalid record with its rejection reason.",
+      "file": {
+        "path": "batches/fixture_005_unknown_policy/payments.csv",
+        "row_count": 1,
+        "sha256": "e4c96331ba30aa2c60eb1eac4bfe1b11bdb3f6beb159e393f6fe71281ca1880a"
+      }
+    },
+    {
+      "batch_id": "fixture_006_precision",
+      "batch_as_of_utc": "2026-09-03T00:00:00Z",
+      "description": "Reject excess decimal places; do not round.",
+      "file": {
+        "path": "batches/fixture_006_precision/payments.csv",
+        "row_count": 1,
+        "sha256": "33d299f865bcdea54ff6666ef3fb6b331a33d26ab6c4bccc39cc97efc24f357d"
+      }
+    },
+    {
+      "batch_id": "fixture_007_late",
+      "batch_as_of_utc": "2026-09-03T00:00:00Z",
+      "description": "Deliver an August payment in September; update August's total.",
+      "file": {
+        "path": "batches/fixture_007_late/payments.csv",
+        "row_count": 1,
+        "sha256": "5bbf44e4c80e459f0dc816a72ece52ce3f593c0aaf2fa7d882ec3cf29ea2920b"
+      }
+    },
+    {
+      "batch_id": "fixture_008_invalid_correction",
+      "batch_as_of_utc": "2026-09-04T00:00:00Z",
+      "description": "A rejected newer version must not replace accepted data.",
+      "file": {
+        "path": "batches/fixture_008_invalid_correction/payments.csv",
+        "row_count": 1,
+        "sha256": "b5fffefa155481bfc5585b9417174ac9a9f006443629070224cd6873972069e8"
+      }
+    },
+    {
+      "batch_id": "fixture_009_conflict_current",
+      "batch_as_of_utc": "2026-09-04T00:00:00Z",
+      "description": "Fail the whole batch; the accompanying valid new payment must not be committed.",
+      "file": {
+        "path": "batches/fixture_009_conflict_current/payments.csv",
+        "row_count": 2,
+        "sha256": "70d9b198e1fc399edb04b062ea2c59e6cc22d088280137e8c17abadcf8233edd"
+      }
+    },
+    {
+      "batch_id": "fixture_010_conflict_history",
+      "batch_as_of_utc": "2026-09-04T00:00:00Z",
+      "description": "Detect a conflict with a superseded accepted version, too.",
+      "file": {
+        "path": "batches/fixture_010_conflict_history/payments.csv",
+        "row_count": 1,
+        "sha256": "1922b966e5061328a5aee94387e19ad03f3526bf9071c3542e41b05fb29735ed"
+      }
+    },
+    {
+      "batch_id": "fixture_011_missing_column",
+      "batch_as_of_utc": "2026-09-04T00:00:00Z",
+      "description": "Fail the file contract when payment_id is absent.",
+      "file": {
+        "path": "batches/fixture_011_missing_column/payments.csv",
+        "row_count": 1,
+        "sha256": "5e683343c2f84a96e8ea73977452c8ae63abca699c128352fde9f80b686058a5"
+      }
+    },
+    {
+      "batch_id": "fixture_012_empty",
+      "batch_as_of_utc": "2026-09-04T00:00:00Z",
+      "description": "A header-only payment delivery is a valid no-op.",
+      "file": {
+        "path": "batches/fixture_012_empty/payments.csv",
+        "row_count": 0,
+        "sha256": "a4fed734b9489b8ed35db569f9489810bdc69b315c7e1b3f2c974b88ad965028"
+      }
+    },
+    {
+      "batch_id": "fixture_013_normalized_duplicate",
+      "batch_as_of_utc": "2026-09-04T00:00:00Z",
+      "description": "Trim strings and compare decimal values before deduplication.",
+      "file": {
+        "path": "batches/fixture_013_normalized_duplicate/payments.csv",
+        "row_count": 1,
+        "sha256": "dddb2647136c5d3a09bd65277b9d12ad58f7782a3cc3c280e49e12aa3aa57414"
+      }
+    },
+    {
+      "batch_id": "fixture_014_recovered",
+      "batch_as_of_utc": "2026-09-04T00:00:00Z",
+      "description": "A corrected previously rejected payment can be accepted in a later batch.",
+      "file": {
+        "path": "batches/fixture_014_recovered/payments.csv",
+        "row_count": 1,
+        "sha256": "3077cdb299ecb95e18661085812dc9ed3ebe40ce1825ac9381edb529f0084bdc"
+      }
+    }
+  ],
+  "processing_order": "Use a fresh fixture state. Load the reference baseline, then process batches in listed order. After each expected failure, continue with the next batch; the prior published state must remain intact."
+}
