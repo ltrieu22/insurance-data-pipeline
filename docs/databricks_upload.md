@@ -60,8 +60,8 @@ usage quotas. See [Free Edition](https://docs.databricks.com/aws/en/getting-star
 Keep the fixture and demo in separate transformation schemas or explicitly rebuild
 state before switching datasets, since their immutable reference baselines differ.
 
-Next: bronze ingestion, silver validation and version handling, then gold tables
-for Power BI.
+Next: [bronze ingestion](bronze_ingestion.md), silver validation and version
+handling, then gold tables for Power BI.
 
 ## Updating an existing setup
 
