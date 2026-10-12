@@ -1,8 +1,8 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # Bronze: retain source deliveries
-# MAGIC Reuse the files extracted by `00_inspect_sources`. No business values are
-# MAGIC trimmed, cast, validated, or deduplicated here. Run one ingestion at a time.
+# MAGIC # Bronze: ingest raw deliveries
+# MAGIC Reuse the extracted fixture/demo files. Run one ingestion at a time.
+# MAGIC The `simple` tables keep the earlier implementation's tables intact.
 
 # COMMAND ----------
 
@@ -12,21 +12,28 @@ import io
 import json
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
-from uuid import uuid4
 
 
 REQUIRED_COLUMNS = {
     "customers": {"customer_id", "region", "customer_segment"},
-    "policies": {"policy_id", "customer_id", "product_code", "start_date"},
+    "policies": {"policy_id", "customer_id", "product_code"},
     "payments": {
         "payment_id", "policy_id", "payment_date", "amount", "currency", "source_updated_at"
     },
 }
-KNOWN_COLUMNS = {**REQUIRED_COLUMNS, "policies": REQUIRED_COLUMNS["policies"] | {"end_date"}}
+FILE_KEYS = ["batch_id", "entity"]
+FILE_IDENTITY = (
+    "batch_as_of_utc", "source_file", "source_sha256", "input_row_count",
+    "file_status", "error_codes",
+)
+BRONZE_COMMON_SCHEMA = """entity STRING, batch_id STRING, batch_as_of_utc TIMESTAMP,
+    source_file STRING, source_sha256 STRING, ingested_at TIMESTAMP"""
+FILE_SCHEMA = BRONZE_COMMON_SCHEMA + """, input_row_count BIGINT,
+    file_status STRING, error_codes ARRAY<STRING>, error_detail STRING"""
+RAW_SCHEMA = BRONZE_COMMON_SCHEMA + ", source_row_number BIGINT, raw_payload STRING"
 
 
 def unique_json_object(pairs):
-    """Reject repeated JSON field names instead of silently choosing one value."""
     record = {}
     for name, value in pairs:
         if name in record:
@@ -35,8 +42,8 @@ def unique_json_object(pairs):
     return record
 
 
-def parse_records(content: bytes, entity: str) -> tuple[list[dict], set[str]]:
-    """Parse file structure without normalizing or validating business values."""
+def parse_records(content, entity):
+    """Parse structure while preserving source values, including whitespace."""
     text = content.decode("utf-8")
     if entity == "policies":
         records = json.loads(text, object_pairs_hook=unique_json_object)
@@ -48,8 +55,7 @@ def parse_records(content: bytes, entity: str) -> tuple[list[dict], set[str]]:
         header = next(reader, [])
         if not header or any(not name.strip() for name in header) or len(header) != len(set(header)):
             raise ValueError("CSV needs a header with unique, nonblank column names.")
-        columns = set(header)
-        records = []
+        columns, records = set(header), []
         for values in reader:
             if len(values) != len(header):
                 raise ValueError("CSV row width differs from its header.")
@@ -57,8 +63,8 @@ def parse_records(content: bytes, entity: str) -> tuple[list[dict], set[str]]:
     return records, columns
 
 
-def prepare_sources(sources_root: Path, dataset: str) -> tuple[list[dict], list[dict]]:
-    """Build raw file and row records from the manifest, never the expected results."""
+def prepare_sources(sources_root, dataset):
+    """Read deliveries in manifest order; expected outcomes are not pipeline input."""
     manifest = json.loads(
         (sources_root / "manifest.json").read_bytes(), object_pairs_hook=unique_json_object
     )
@@ -90,7 +96,7 @@ def prepare_sources(sources_root: Path, dataset: str) -> tuple[list[dict], list[
             raise ValueError(f"Source path escapes its directory: {relative}")
         content = path.read_bytes()
         checksum = hashlib.sha256(content).hexdigest()
-        errors, details, warnings = [], [], []
+        errors, details = [], []
         if checksum != description["sha256"]:
             errors.append("CHECKSUM_MISMATCH")
         try:
@@ -99,31 +105,23 @@ def prepare_sources(sources_root: Path, dataset: str) -> tuple[list[dict], list[
             records, columns = [], set()
             errors.append("UNPARSEABLE_FILE")
             details.append(str(error))
-        if "UNPARSEABLE_FILE" not in errors:
+        else:
             missing = REQUIRED_COLUMNS[entity] - columns
-            # An empty JSON array has no header; its schema is checked when rows arrive.
+            # An empty JSON array has no header to check.
             if missing and not (entity == "policies" and not records):
                 errors.append("MISSING_REQUIRED_COLUMN")
                 details.append("Missing columns: " + ", ".join(sorted(missing)))
-            extra = columns - KNOWN_COLUMNS[entity]
-            if extra:
-                warnings.append("Additional columns: " + ", ".join(sorted(extra)))
             if len(records) != description["row_count"]:
                 errors.append("ROW_COUNT_MISMATCH")
 
         provenance = {
-            "dataset": dataset, "entity": entity, "batch_id": batch["batch_id"],
-            "batch_as_of_utc": as_of, "source_file": str(path), "source_sha256": checksum,
+            "entity": entity, "batch_id": batch["batch_id"], "batch_as_of_utc": as_of,
+            "source_file": str(path), "source_sha256": checksum,
         }
-        identity = [
-            batch["batch_as_of_utc"], str(path), checksum,
-            description["sha256"], description["row_count"],
-        ]
-        fingerprint = hashlib.sha256(json.dumps(identity).encode("utf-8")).hexdigest()
         files.append({
-            **provenance, "delivery_fingerprint": fingerprint, "source_content": content,
-            "input_row_count": len(records), "file_status": "FAILED" if errors else "READY",
-            "error_codes": errors, "error_detail": "; ".join(details), "schema_warnings": warnings,
+            **provenance, "input_row_count": len(records),
+            "file_status": "FAILED" if errors else "READY",
+            "error_codes": errors, "error_detail": "; ".join(details),
         })
         for number, record in enumerate(records, start=1):
             rows.append({
@@ -131,6 +129,14 @@ def prepare_sources(sources_root: Path, dataset: str) -> tuple[list[dict], list[
                 "raw_payload": json.dumps(record, ensure_ascii=False, sort_keys=True),
             })
     return files, rows
+
+
+def check_immutable_files(files, stored):
+    previous = {(file["batch_id"], file["entity"]): file for file in stored}
+    for file in files:
+        key = (file["batch_id"], file["entity"])
+        if key in previous and any(file[field] != previous[key][field] for field in FILE_IDENTITY):
+            raise ValueError(f"Changed immutable delivery: {key}. Use a new batch ID.")
 
 
 def merge_raw(spark, table, incoming, keys):
@@ -143,121 +149,33 @@ def merge_raw(spark, table, incoming, keys):
     """)
 
 
-def verify_bronze(spark, prefix, files, rows, incoming_files, incoming_rows, keys):
-    """Check stored source contents and replay writes with fresh run metadata."""
-    from pyspark.sql import functions as F
-
-    delivered = incoming_files.select(*keys)
-    stored = spark.table(f"{prefix}_rows").join(delivered, keys, "left_semi").collect()
-    expected = {
-        (row["batch_id"], row["entity"], row["source_row_number"]): row["raw_payload"]
-        for row in rows
-    }
-    actual = {
-        (row.batch_id, row.entity, row.source_row_number): row.raw_payload for row in stored
-    }
-    if actual != expected or len(stored) != len(expected):
-        raise ValueError("Stored bronze rows differ from the source records.")
-
-    stored_files = spark.table(f"{prefix}_files").orderBy(*keys).collect()
-    expected_files = {
-        (file["batch_id"], file["entity"]): file["source_content"] for file in files
-    }
-    actual_files = {}
-    for file in stored_files:
-        key = (file.batch_id, file.entity)
-        if key in expected_files:
-            if key in actual_files:
-                raise ValueError(f"Repeated bronze file record: {key}")
-            actual_files[key] = bytes(file.source_content)
-    if actual_files != expected_files:
-        raise ValueError("Stored bronze file bytes differ from the sources.")
-
-    # Existing content and first-ingestion metadata must survive a new run ID/time.
-    row_keys = keys + ["source_row_number"]
-    stored_rows = spark.table(f"{prefix}_rows").orderBy(*row_keys).collect()
-    replay_id = str(uuid4())
-    replay_files = incoming_files.withColumn("ingested_at", F.current_timestamp()).withColumn(
-        "ingestion_run_id", F.lit(replay_id)
-    )
-    replay_rows = incoming_rows.withColumn("ingested_at", F.current_timestamp()).withColumn(
-        "ingestion_run_id", F.lit(replay_id)
-    )
-    merge_raw(spark, f"{prefix}_files", replay_files, keys)
-    merge_raw(spark, f"{prefix}_rows", replay_rows, row_keys)
-    replayed_rows = spark.table(f"{prefix}_rows").orderBy(*row_keys).collect()
-    replayed_files = spark.table(f"{prefix}_files").orderBy(*keys).collect()
-    if stored_rows != replayed_rows or stored_files != replayed_files:
-        raise ValueError("Bronze changed during an identical replay.")
-
-
 def ingest_bronze(spark, volume_root, dataset):
-    from pyspark.sql import functions as F
-
     root = PurePosixPath(volume_root)
     if root.parts[:2] != ("/", "Volumes") or len(root.parts) != 5 or dataset not in ("fixture", "demo"):
         raise ValueError("Use /Volumes/<catalog>/<schema>/<volume> and fixture or demo.")
-    catalog, schema = root.parts[2:4]
-    namespace = ".".join("`" + name.replace("`", "``") + "`" for name in (catalog, schema))
-    prefix = f"{namespace}.insurance_{dataset}_bronze"
-    common = """dataset STRING, entity STRING, batch_id STRING, batch_as_of_utc TIMESTAMP,
-        source_file STRING, source_sha256 STRING"""
-    metadata = "ingested_at TIMESTAMP, ingestion_run_id STRING"
-    file_schema = common + """, delivery_fingerprint STRING, source_content BINARY,
-        input_row_count BIGINT, file_status STRING, error_codes ARRAY<STRING>,
-        error_detail STRING, schema_warnings ARRAY<STRING>, """ + metadata
-    row_schema = common + ", source_row_number BIGINT, raw_payload STRING, " + metadata
-    run_schema = """ingestion_run_id STRING, dataset STRING, started_at TIMESTAMP,
-        completed_at TIMESTAMP, status STRING, input_row_count BIGINT,
-        inserted_row_count BIGINT, failed_file_count BIGINT, error_detail STRING"""
-    for suffix, ddl in (("files", file_schema), ("rows", row_schema), ("runs", run_schema)):
-        spark.sql(f"CREATE TABLE IF NOT EXISTS {prefix}_{suffix} ({ddl}) USING DELTA")
-
-    run_id, started = str(uuid4()), datetime.now(timezone.utc)
-    files, rows = [], []
+    namespace = ".".join("`" + part.replace("`", "``") + "`" for part in root.parts[2:4])
+    prefix = f"{namespace}.insurance_{dataset}_simple_bronze"
+    spark.conf.set("spark.sql.session.timeZone", "UTC")
+    files, rows = prepare_sources(Path(volume_root) / dataset, dataset)
+    for suffix, schema in (("files", FILE_SCHEMA), ("rows", RAW_SCHEMA)):
+        spark.sql(f"CREATE TABLE IF NOT EXISTS {prefix}_{suffix} ({schema}) USING DELTA")
+    stored = [row.asDict() for row in spark.table(f"{prefix}_files").collect()]
+    for file in stored:
+        file["batch_as_of_utc"] = file["batch_as_of_utc"].replace(tzinfo=timezone.utc)
+    check_immutable_files(files, stored)
     before = spark.table(f"{prefix}_rows").count()
-    status, error_detail = "FAILED", ""
-    try:
-        files, rows = prepare_sources(Path(volume_root) / dataset, dataset)
-        for record in files + rows:
-            record.update(ingested_at=started, ingestion_run_id=run_id)
-        incoming_files = spark.createDataFrame(files, file_schema)
-        incoming_rows = spark.createDataFrame(rows, row_schema)
-        keys = ["dataset", "batch_id", "entity"]
-        existing_files = spark.table(f"{prefix}_files")
-        changed = incoming_files.alias("new").join(existing_files.alias("old"), keys).where(
-            F.col("new.delivery_fingerprint") != F.col("old.delivery_fingerprint")
-        ).select(*keys).limit(1).collect()
-        if changed:
-            raise ValueError(f"Changed immutable delivery: {changed[0].asDict()}. Use a new batch ID.")
-
-        merge_raw(spark, f"{prefix}_files", incoming_files, keys)
-        merge_raw(spark, f"{prefix}_rows", incoming_rows, keys + ["source_row_number"])
-
-        verify_bronze(spark, prefix, files, rows, incoming_files, incoming_rows, keys)
-        if any(file["file_status"] == "FAILED" for file in files):
-            status = "COMPLETED_WITH_FILE_FAILURES"
-        else:
-            status = "SUCCESS"
-    except Exception as error:
-        error_detail = str(error)
-        raise
-    finally:
-        run = {
-            "ingestion_run_id": run_id, "dataset": dataset, "started_at": started,
-            "completed_at": datetime.now(timezone.utc), "status": status,
-            "input_row_count": len(rows),
-            "inserted_row_count": spark.table(f"{prefix}_rows").count() - before,
-            "failed_file_count": sum(file["file_status"] == "FAILED" for file in files),
-            "error_detail": error_detail,
-        }
-        spark.createDataFrame([run], run_schema).write.mode("append").saveAsTable(f"{prefix}_runs")
-    return prefix, run
+    started = datetime.now(timezone.utc)
+    for record in files + rows:
+        record["ingested_at"] = started
+    merge_raw(spark, f"{prefix}_files", spark.createDataFrame(files, FILE_SCHEMA), FILE_KEYS)
+    merge_raw(spark, f"{prefix}_rows", spark.createDataFrame(rows, RAW_SCHEMA), FILE_KEYS + ["source_row_number"])
+    inserted = spark.table(f"{prefix}_rows").count() - before
+    return prefix, {"input_rows": len(rows), "new_rows": inserted,
+                    "failed_files": sum(file["file_status"] == "FAILED" for file in files)}
 
 
 # COMMAND ----------
 
-# Runtime cells are guarded so the file parser can also be tested without Databricks.
 if "dbutils" in globals():
     dbutils.widgets.text("volume_root", "/Volumes/insurance_project/default/insurance_sources")
     dbutils.widgets.dropdown("dataset", "fixture", ["fixture", "demo"])
@@ -265,13 +183,11 @@ if "dbutils" in globals():
 # COMMAND ----------
 
 if "dbutils" in globals():
-    table_prefix, run = ingest_bronze(
+    bronze_prefix, bronze_summary = ingest_bronze(
         spark, dbutils.widgets.get("volume_root").strip(), dbutils.widgets.get("dataset")
     )
-    print(f"{run['status']}: {run['input_row_count']} raw rows, {run['inserted_row_count']} newly stored.")
-    display(spark.table(f"{table_prefix}_files").select(
-        "entity", "batch_id", "input_row_count", "file_status", "error_codes", "schema_warnings"
+    print(f"Bronze: {bronze_summary['input_rows']} raw rows, "
+          f"{bronze_summary['new_rows']} newly stored; failed files: {bronze_summary['failed_files']}.")
+    display(spark.table(f"{bronze_prefix}_files").select(
+        "entity", "batch_id", "input_row_count", "file_status", "error_codes"
     ).orderBy("entity", "batch_id"))
-    display(spark.table(f"{table_prefix}_rows").select(
-        "entity", "batch_id", "source_row_number", "raw_payload"
-    ).orderBy("entity", "batch_id", "source_row_number").limit(20))

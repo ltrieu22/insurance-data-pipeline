@@ -36,15 +36,15 @@ class BronzeSourceTests(unittest.TestCase):
                 description["sha256"] = hashlib.sha256(content).hexdigest()
         (self.root / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
 
-    def test_all_fixture_deliveries_are_retained_with_original_file_bytes(self):
+    def test_all_fixture_deliveries_retain_paths_hashes_and_raw_values(self):
         files, rows = prepare_sources(self.root, "fixture")
         self.assertEqual(len(files), 16)
         self.assertEqual(len(rows), 17)
         self.assertEqual(sum(row["entity"] == "payments" for row in rows), 15)
         for file in files:
             relative = Path(file["source_file"]).relative_to(self.root).as_posix()
-            self.assertEqual(file["source_content"], self.source_files[relative])
-            self.assertEqual(file["source_sha256"], hashlib.sha256(file["source_content"]).hexdigest())
+            self.assertEqual(file["source_sha256"], hashlib.sha256(self.source_files[relative]).hexdigest())
+            self.assertNotIn("source_content", file)
         policy = next(row for row in rows if row["entity"] == "policies")
         self.assertIsNone(json.loads(policy["raw_payload"])["end_date"])
 
@@ -80,26 +80,29 @@ class BronzeSourceTests(unittest.TestCase):
         (self.root / "expected_outcomes.json").write_text("not valid JSON", encoding="utf-8")
         self.assertEqual(len(prepare_sources(self.root, "fixture")[1]), 17)
 
-    def test_identical_preparation_is_stable_and_changed_delivery_changes_fingerprint(self):
+    def test_identical_preparation_is_stable_and_changed_delivery_is_blocked(self):
         original, original_rows = prepare_sources(self.root, "fixture")
         self.assertEqual((original, original_rows), prepare_sources(self.root, "fixture"))
+        NOTEBOOK["check_immutable_files"](original, original)
         path = "batches/fixture_001_initial/payments.csv"
         (self.root / path).write_bytes(self.source_files[path].replace(b"100.00", b"101.00"))
         changed, _ = prepare_sources(self.root, "fixture")
         old = next(file for file in original if file["batch_id"] == "fixture_001_initial")
         new = next(file for file in changed if file["batch_id"] == "fixture_001_initial")
-        self.assertNotEqual(old["delivery_fingerprint"], new["delivery_fingerprint"])
+        with self.assertRaisesRegex(ValueError, "Changed immutable delivery"):
+            NOTEBOOK["check_immutable_files"]([new], [old])
         self.assertEqual(new["error_codes"], ["CHECKSUM_MISMATCH"])
 
-    def test_changing_batch_time_changes_the_delivery_identity(self):
+    def test_changing_batch_time_is_blocked(self):
         files, _ = prepare_sources(self.root, "fixture")
         manifest = json.loads((self.root / "manifest.json").read_bytes())
         manifest["batches"][0]["batch_as_of_utc"] = "2026-09-03T00:00:00Z"
         (self.root / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
         changed, _ = prepare_sources(self.root, "fixture")
-        self.assertNotEqual(files[2]["delivery_fingerprint"], changed[2]["delivery_fingerprint"])
+        with self.assertRaisesRegex(ValueError, "Changed immutable delivery"):
+            NOTEBOOK["check_immutable_files"](changed, files)
 
-    def test_additional_columns_are_retained_and_warned_about(self):
+    def test_additional_columns_are_retained(self):
         path = "batches/fixture_001_initial/payments.csv"
         lines = self.source_files[path].decode("utf-8").splitlines()
         content = (lines[0] + ",extra_note\n" + lines[1] + ", keep this \n").encode("utf-8")
@@ -108,17 +111,16 @@ class BronzeSourceTests(unittest.TestCase):
         file = next(file for file in files if file["batch_id"] == "fixture_001_initial")
         row = next(row for row in rows if row["batch_id"] == "fixture_001_initial")
         self.assertEqual(file["file_status"], "READY")
-        self.assertEqual(file["schema_warnings"], ["Additional columns: extra_note"])
         self.assertEqual(json.loads(row["raw_payload"])["extra_note"], " keep this ")
 
-    def test_unparseable_file_bytes_are_retained_and_other_deliveries_continue(self):
+    def test_unparseable_file_is_flagged_and_other_deliveries_continue(self):
         path = "batches/fixture_001_initial/payments.csv"
         content = b'payment_id,amount\n"unterminated\n'
         self.change_source(path, content)
         files, rows = prepare_sources(self.root, "fixture")
         file = next(file for file in files if file["batch_id"] == "fixture_001_initial")
         self.assertEqual(file["error_codes"], ["UNPARSEABLE_FILE"])
-        self.assertEqual(file["source_content"], content)
+        self.assertEqual((self.root / path).read_bytes(), content)
         self.assertEqual(file["file_status"], "FAILED")
         self.assertTrue(any(row["batch_id"] == "fixture_014_recovered" for row in rows))
 
@@ -127,7 +129,7 @@ class BronzeSourceTests(unittest.TestCase):
             with self.subTest(content=content), self.assertRaises(ValueError):
                 parse_records(content, "payments")
 
-    def test_repeated_json_fields_fail_without_losing_the_original_file(self):
+    def test_repeated_json_fields_fail_and_leave_the_volume_file_intact(self):
         path = "reference/policies.json"
         content = b'[{"policy_id": "P000001", "policy_id": "P000002"}]\n'
         self.change_source(path, content)
@@ -136,7 +138,7 @@ class BronzeSourceTests(unittest.TestCase):
         self.assertEqual(file["file_status"], "FAILED")
         self.assertEqual(file["error_codes"], ["UNPARSEABLE_FILE"])
         self.assertIn("Repeated JSON field name: policy_id", file["error_detail"])
-        self.assertEqual(file["source_content"], content)
+        self.assertEqual((self.root / path).read_bytes(), content)
         self.assertFalse(any(row["entity"] == "policies" for row in rows))
 
     def test_manifest_dataset_duplicate_batches_and_unsafe_paths_are_rejected(self):

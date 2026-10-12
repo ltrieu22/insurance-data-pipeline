@@ -180,7 +180,8 @@ class SourceGenerationTests(unittest.TestCase):
 
 
 class FixtureTests(unittest.TestCase):
-    def test_fixture_covers_the_agreed_scenarios_with_hand_written_totals(self) -> None:
+    def test_fixture_preserves_the_original_bundle_and_its_legacy_oracle(self) -> None:
+        # Silver's reduced expectations are checked separately in test_silver.py.
         files = build_fixture()
         manifest = json.loads(files["manifest.json"])
         expected = json.loads(files["expected_outcomes.json"])["after_batches"]

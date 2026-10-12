@@ -18,16 +18,16 @@ SILVER = runpy.run_path(str(ROOT / "databricks" / "02_transform_silver.py"))
 reference_plan = SILVER["reference_plan"]
 payment_plan = SILVER["payment_plan"]
 validate_row = SILVER["validate_row"]
-current_payments = SILVER["current_payments"]
+VERIFY = runpy.run_path(str(ROOT / "databricks" / "03_verify_pipeline.py"))
 
 
 def raw_row(values, entity="payments", number=1, cutoff="2026-09-04T00:00:00Z"):
     return {
-        "dataset": "fixture", "entity": entity, "batch_id": "test_delivery",
+        "entity": entity, "batch_id": "test_delivery",
         "batch_as_of_utc": SILVER["parse_timestamp"](cutoff),
         "source_file": "/test/input.csv", "source_sha256": "test_checksum",
         "source_row_number": number, "raw_payload": json.dumps(values),
-        "ingested_at": SILVER["parse_timestamp"](cutoff), "ingestion_run_id": "bronze_test_run",
+        "ingested_at": SILVER["parse_timestamp"](cutoff),
     }
 
 
@@ -90,7 +90,7 @@ class SilverValidationTests(unittest.TestCase):
     def test_rejection_counts_once_with_all_reasons_and_provenance(self):
         raw = raw_row({**PAYMENT, "amount": "-10.00", "policy_id": "P_MISSING", "currency": "USD"}, number=7)
         result = payment_plan([raw], {"P000001"}, [])
-        self.assertEqual(result["rejected_row_count"], 1)
+        self.assertEqual(len(result["rejections"]), 1)
         rejected = result["rejections"][0]
         self.assertEqual(rejected["reason_codes"], ["NON_POSITIVE_AMOUNT", "UNKNOWN_POLICY", "UNSUPPORTED_CURRENCY"])
         for field in SILVER["PROVENANCE"]:
@@ -100,8 +100,8 @@ class SilverValidationTests(unittest.TestCase):
         for identifier in (None, "", "  ", 123, [], {}):
             with self.subTest(identifier=identifier):
                 result = payment_plan([raw_row({**PAYMENT, "payment_id": identifier})], {"P000001"}, [])
-                self.assertEqual(result["rejected_row_count"], 1)
-                self.assertEqual(result["versions"], [])
+                self.assertEqual(len(result["rejections"]), 1)
+                self.assertEqual(result["changes"], [])
 
     def test_only_accepted_parents_can_satisfy_relationships(self):
         rows = [
@@ -111,7 +111,7 @@ class SilverValidationTests(unittest.TestCase):
         baseline = reference_plan(rows)
         self.assertEqual(baseline["customers"], [])
         self.assertEqual(baseline["policies"], [])
-        self.assertEqual(baseline["rejected_row_count"], 2)
+        self.assertEqual(len(baseline["rejections"]), 2)
         self.assertEqual(baseline["rejections"][1]["reason_codes"], ["UNKNOWN_CUSTOMER"])
         result = payment_plan([raw_row(PAYMENT)], set(), [])
         self.assertEqual(result["rejections"][0]["reason_codes"], ["UNKNOWN_POLICY"])
@@ -122,7 +122,6 @@ class SilverValidationTests(unittest.TestCase):
         rows += [raw_row({**POLICY, "end_date": " "}, "policies", number=2)]
         result = reference_plan(rows)
         self.assertEqual(result["status"], "SUCCESS")
-        self.assertEqual(result["duplicate_row_count"], 2)
         self.assertEqual(len(result["customers"]), 1)
         self.assertEqual(len(result["policies"]), 1)
         for entity, changed in (
@@ -134,198 +133,185 @@ class SilverValidationTests(unittest.TestCase):
                 conflict = reference_plan(rows + [raw_row(changed, entity, number=3)])
                 self.assertEqual(conflict["status"], "FAILED")
                 self.assertEqual(conflict["error_codes"], ["CONFLICTING_REFERENCE_ID"])
-                self.assertTrue(any(row["rejection_kind"] == "BATCH_CONFLICT" for row in conflict["rejections"]))
+                self.assertTrue(any("CONFLICTING_REFERENCE_ID" in row["reason_codes"] for row in conflict["rejections"]))
 
-    def test_policy_date_range_and_future_start(self):
-        _, reasons = validate_row(raw_row({**POLICY, "end_date": "2025-12-31"}, "policies"), "policies", {"C000001"})
-        self.assertEqual(reasons, ["INVALID_POLICY_DATE_RANGE"])
-        _, reasons = validate_row(raw_row({**POLICY, "start_date": "2027-01-01"}, "policies"), "policies", {"C000001"})
+    def test_policy_dates_are_outside_the_silver_reporting_scope(self):
+        values, reasons = validate_row(raw_row({**POLICY, "start_date": "not-a-date", "end_date": "earlier"}, "policies"), "policies", {"C000001"})
         self.assertEqual(reasons, [])
-        result = payment_plan([raw_row(PAYMENT)], {"P000001"}, [])
-        self.assertEqual(result["inserted_count"], 1)
+        self.assertEqual(values, {key: POLICY[key] for key in SILVER["FIELDS"]["policies"]})
 
-    def test_baseline_identity_allows_only_the_same_reference_delivery(self):
-        files = [
-            {"entity": "customers", "delivery_fingerprint": "customer_delivery"},
-            {"entity": "policies", "delivery_fingerprint": "policy_delivery"},
-        ]
-        fingerprint, errors = SILVER["check_baseline_identity"](files, [], "reference_v1")
-        self.assertEqual(errors, [])
-        stored = [{"batch_id": "reference_v1", "fingerprint": fingerprint, "status": "READY"}]
-        self.assertEqual(SILVER["check_baseline_identity"](list(reversed(files)), stored, "reference_v1"), (fingerprint, []))
-        for status in ("READY", "LOADING"):
-            stored[0]["status"] = status
-            changed_files = copy.deepcopy(files)
-            changed_files[0]["delivery_fingerprint"] = "changed_content_or_time"
-            self.assertEqual(SILVER["check_baseline_identity"](changed_files, stored, "reference_v1")[1], ["IMMUTABLE_BASELINE_CHANGED"])
-            self.assertEqual(SILVER["check_baseline_identity"](files, stored, "reference_v2")[1], ["IMMUTABLE_BASELINE_CHANGED"])
-
-
-class SilverVersionTests(unittest.TestCase):
-    def test_multiple_versions_keep_evidence_and_only_one_current_candidate(self):
-        older = raw_row(PAYMENT)
-        newer = raw_row({**PAYMENT, "amount": "120.00", "source_updated_at": "2026-09-02T12:00:00Z"}, number=2)
-        result = payment_plan([newer, older, copy.deepcopy(newer)], {"P000001"}, [])
-        self.assertEqual(result["inserted_count"], 1)
-        self.assertEqual(result["duplicate_row_count"], 1)
-        self.assertEqual(result["superseded_version_count"], 1)
-        self.assertEqual(len(result["versions"]), 2)
-        self.assertEqual(current_payments(result["versions"])["PM000001"]["amount"], Decimal("120.00"))
-
-    def test_incoming_conflicts_block_every_payment_change(self):
-        second = raw_row({**PAYMENT, "amount": "101.00"}, number=2)
-        unrelated = raw_row({**PAYMENT, "payment_id": "PM000002"}, number=3)
-        result = payment_plan([raw_row(PAYMENT), second, unrelated], {"P000001"}, [])
-        self.assertEqual(result["status"], "FAILED")
-        self.assertEqual(result["versions"], [])
-        self.assertEqual(result["inserted_count"], 0)
-        self.assertEqual(result["rejected_row_count"], 0)
-        self.assertEqual(len(result["rejections"]), 2)
-
-    def test_superseded_incoming_version_is_checked_before_newer_candidate(self):
-        history = payment_plan([raw_row(PAYMENT)], {"P000001"}, [])["versions"]
-        newer = raw_row({**PAYMENT, "source_updated_at": "2026-09-02T12:00:00Z"})
-        conflicting_old = raw_row({**PAYMENT, "amount": "101.00"}, number=2)
-        result = payment_plan([newer, conflicting_old], {"P000001"}, history)
-        self.assertEqual(result["status"], "FAILED")
-        self.assertEqual(result["versions"], [])
-
-    def test_invalid_correction_cannot_conflict_with_or_replace_valid_data(self):
-        history = payment_plan([raw_row(PAYMENT)], {"P000001"}, [])["versions"]
-        for changes in (
-            {"amount": "-10.00"},
-            {"amount": "-10.00", "source_updated_at": "2026-09-03T12:00:00Z"},
+    def test_changed_accepted_reference_data_requires_review(self):
+        rows = [raw_row(CUSTOMER, "customers"), raw_row(POLICY, "policies")]
+        baseline = reference_plan(rows)
+        for entity, field, replacement in (
+            ("customers", "region", "Other"), ("policies", "product_code", "LIFE_PLUS")
         ):
-            with self.subTest(changes=changes):
-                result = payment_plan([raw_row({**PAYMENT, **changes})], {"P000001"}, history)
-                self.assertEqual(result["status"], "SUCCESS_WITH_REJECTIONS")
-                self.assertEqual(result["versions"], [])
-                self.assertEqual(current_payments(history)["PM000001"]["amount"], Decimal("100.00"))
+            stored = baseline[entity]
+            SILVER["check_reference_data"](stored, stored, entity)
+            for changed in ([{**stored[0], field: replacement}], []):
+                with self.subTest(entity=entity), self.assertRaisesRegex(ValueError, "baseline changed"):
+                    SILVER["check_reference_data"](changed, stored, entity)
 
-    def test_first_seen_stale_version_is_retained_and_then_checked_for_conflicts(self):
+
+class SilverPaymentTests(unittest.TestCase):
+    def test_newest_valid_version_wins_and_duplicates_collapse(self):
+        newer = raw_row({**PAYMENT, "amount": "120.00", "source_updated_at": "2026-09-02T12:00:00Z"}, number=2)
+        result = payment_plan([newer, raw_row(PAYMENT), copy.deepcopy(newer)], {"P000001"}, [])
+        self.assertEqual(len(result["changes"]), 1)
+        self.assertEqual(result["changes"][0]["amount"], Decimal("120.00"))
+        self.assertEqual(payment_plan([newer], {"P000001"}, result["changes"])["changes"], [])
+
+    def test_incoming_or_current_conflicts_block_every_payment_change(self):
+        first = raw_row(PAYMENT)
+        conflict = raw_row({**PAYMENT, "amount": "101.00"}, number=2)
+        unrelated = raw_row({**PAYMENT, "payment_id": "PM000002"}, number=3)
+        current = payment_plan([first], {"P000001"}, [])["changes"]
+        for incoming, stored, rejected in (([first, conflict, unrelated], [], 2), ([conflict, unrelated], current, 1)):
+            with self.subTest(stored=bool(stored)):
+                result = payment_plan(incoming, {"P000001"}, stored)
+                self.assertEqual(result["status"], "FAILED")
+                self.assertEqual(result["changes"], [])
+                self.assertEqual(len(result["rejections"]), rejected)
+                self.assertEqual(result["error_codes"], ["CONFLICTING_PAYMENT_VERSION"])
+
+    def test_current_version_conflict_is_checked_even_with_newer_candidate(self):
+        current = payment_plan([raw_row(PAYMENT)], {"P000001"}, [])["changes"]
         newer = raw_row({**PAYMENT, "source_updated_at": "2026-09-02T12:00:00Z"})
-        history = payment_plan([newer], {"P000001"}, [])["versions"]
-        result = payment_plan([raw_row(PAYMENT)], {"P000001"}, history)
-        self.assertEqual(result["stale_version_count"], 1)
-        self.assertEqual(result["updated_count"], 0)
-        self.assertEqual(result["new_version_count"], 1)
-        history += result["versions"]
-        conflict = payment_plan([raw_row({**PAYMENT, "amount": "101.00"})], {"P000001"}, history)
-        self.assertEqual(conflict["status"], "FAILED")
+        conflicting_current = raw_row({**PAYMENT, "amount": "101.00"}, number=2)
+        result = payment_plan([newer, conflicting_current], {"P000001"}, current)
+        self.assertEqual(result["status"], "FAILED")
+        self.assertEqual(result["changes"], [])
+
+    def test_historical_payload_conflicts_are_deliberately_stale_noops(self):
+        newer = raw_row({**PAYMENT, "amount": "120.00", "source_updated_at": "2026-09-02T12:00:00Z"})
+        current = payment_plan([newer], {"P000001"}, [])["changes"]
+        for amount in ("100.00", "101.00"):
+            result = payment_plan([raw_row({**PAYMENT, "amount": amount})], {"P000001"}, current)
+            self.assertEqual(result["status"], "SUCCESS")
+            self.assertEqual(result["changes"], [])
+            self.assertEqual(result["rejections"], [])
+
+    def test_invalid_correction_preserves_current_and_valid_unrelated_rows_continue(self):
+        current = payment_plan([raw_row(PAYMENT)], {"P000001"}, [])["changes"]
+        before = copy.deepcopy(current)
+        invalid = raw_row({**PAYMENT, "amount": "-10.00", "source_updated_at": "2026-09-03T12:00:00Z"})
+        unrelated = raw_row({**PAYMENT, "payment_id": "PM000002"}, number=2)
+        result = payment_plan([invalid, unrelated], {"P000001"}, current)
+        self.assertEqual(result["status"], "SUCCESS_WITH_REJECTIONS")
+        self.assertEqual(len(result["rejections"]), 1)
+        self.assertEqual([row["payment_id"] for row in result["changes"]], ["PM000002"])
+        self.assertEqual(current, before)
 
     def test_empty_delivery_never_deletes_current_records(self):
-        history = payment_plan([raw_row(PAYMENT)], {"P000001"}, [])["versions"]
-        before = copy.deepcopy(history)
-        result = payment_plan([], {"P000001"}, history)
+        current = payment_plan([raw_row(PAYMENT)], {"P000001"}, [])["changes"]
+        before = copy.deepcopy(current)
+        result = payment_plan([], {"P000001"}, current)
         self.assertEqual(result["status"], "SUCCESS")
-        self.assertEqual(result["versions"], [])
-        self.assertEqual(history, before)
+        self.assertEqual(result["changes"], [])
+        self.assertEqual(current, before)
 
 
 class SilverSequenceTests(unittest.TestCase):
     def check_sequence(self, exported, dataset):
         manifest = json.loads(exported["manifest.json"])
         oracle = json.loads(exported["expected_outcomes.json"])
+        expected = VERIFY["reduced_expectations"](oracle, dataset)
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
             write_dataset(root, exported)
-            # Source preparation and planning must work without a readable oracle.
+            # Processing must work even when the uploaded oracle cannot be read.
             (root / "expected_outcomes.json").write_text("not pipeline input", encoding="utf-8")
             files, rows = BRONZE["prepare_sources"](root, dataset)
         for raw in rows:
-            raw.update(ingested_at=datetime(2026, 10, 1, tzinfo=timezone.utc), ingestion_run_id="bronze_test")
+            raw["ingested_at"] = datetime(2026, 10, 1, tzinfo=timezone.utc)
         reference_files = [file for file in files if file["entity"] != "payments"]
         reference_rows = [row for row in rows if row["entity"] != "payments"]
-        self.assertEqual(SILVER["delivery_errors"](reference_files, reference_rows, ("customers", "policies"), manifest["baseline"], dataset), [])
+        self.assertEqual(SILVER["delivery_errors"](reference_files, reference_rows, ("customers", "policies"), manifest["baseline"]), [])
         baseline = reference_plan(reference_rows)
         self.assertEqual(baseline["status"], "SUCCESS")
         policies = {row["policy_id"] for row in baseline["policies"]}
-        history, results = [], {}
+        current, results, summaries = {}, {}, []
         for index, batch in enumerate(manifest["batches"]):
             batch_files = [file for file in files if file["batch_id"] == batch["batch_id"]]
             batch_rows = [row for row in rows if row["batch_id"] == batch["batch_id"]]
-            errors = SILVER["delivery_errors"](batch_files, batch_rows, ("payments",), batch, dataset)
-            before = copy.deepcopy(history)
+            errors = SILVER["delivery_errors"](batch_files, batch_rows, ("payments",), batch)
+            before = copy.deepcopy(current)
             if errors:
-                result = {**SILVER["new_plan"](batch_rows), "status": "FAILED", "error_codes": errors}
+                result = SILVER["new_plan"]()
+                result.update(status="FAILED", error_codes=errors)
             else:
-                result = payment_plan(batch_rows, policies, history)
-                if result["status"] == "FAILED":
-                    self.assertEqual(result["versions"], [])
-                    self.assertEqual(history, before)
-                else:
-                    history.extend(result["versions"])
-            expected = oracle["after_batches"][batch["batch_id"]]
-            self.assertEqual(result["status"], expected["status"], batch["batch_id"])
-            self.assertEqual(result["rejected_row_count"], expected["rejected_row_count_in_this_batch"])
-            totals = SILVER["payment_totals"](list(current_payments(history).values()))
+                result = payment_plan(batch_rows, policies, list(current.values()))
+            if result["status"] == "FAILED":
+                self.assertEqual(result["changes"], [])
+            else:
+                for change in result["changes"]:
+                    current[change["payment_id"]] = change
+            if result["status"] == "FAILED":
+                self.assertEqual(current, before)
+            target = expected[batch["batch_id"]]
+            totals = VERIFY["payment_totals"](list(current.values()))
             for key, value in totals.items():
-                self.assertEqual(value, expected[key], (batch["batch_id"], key))
-            if "expected_reason_codes" in expected:
-                reasons = set(result["error_codes"])
-                for rejected in result["rejections"]:
-                    reasons.update(rejected["reason_codes"])
-                self.assertEqual(reasons, set(expected["expected_reason_codes"]))
+                self.assertEqual(value, target[key], (batch["batch_id"], key))
+            reasons = set(result["error_codes"])
+            for rejection in result["rejections"]:
+                reasons.update(rejection["reason_codes"])
+            if "expected_reason_codes" in target:
+                self.assertEqual(reasons, set(target["expected_reason_codes"]))
+            summaries.append(SILVER["batch_summary"](batch, batch_rows, result))
             results[batch["batch_id"]] = result
             if index == 0:
-                replay = payment_plan(batch_rows, policies, history)
-                self.assertEqual(replay["versions"], [])
-                self.assertEqual(replay["inserted_count"], 0)
-                self.assertEqual(replay["updated_count"], 0)
-        before = copy.deepcopy(history)
+                self.assertEqual(payment_plan(batch_rows, policies, list(current.values()))["changes"], [])
+        VERIFY["assert_batch_summaries"](summaries, expected)
+        actual, rejections, sequence_summaries = SILVER["payment_sequence"](files, rows, manifest["batches"], policies)
+        self.assertEqual({row["payment_id"]: row for row in actual}, current)
+        self.assertEqual(sequence_summaries, summaries)
+        self.assertEqual(len(rejections), sum(summary["rejected_row_count"] for summary in summaries))
+        self.assertEqual(
+            (actual, rejections, sequence_summaries),
+            SILVER["payment_sequence"](files, rows, manifest["batches"], policies),
+        )
+        before = copy.deepcopy(current)
         for batch in manifest["batches"]:
             if results[batch["batch_id"]]["status"] != "FAILED":
                 batch_rows = [row for row in rows if row["batch_id"] == batch["batch_id"]]
-                replay = payment_plan(batch_rows, policies, history)
-                self.assertEqual(replay["versions"], [], batch["batch_id"])
-                self.assertEqual(replay["inserted_count"] + replay["updated_count"], 0)
-        self.assertEqual(history, before)
-        return baseline, history, results, oracle, files, rows, manifest
+                self.assertEqual(payment_plan(batch_rows, policies, list(current.values()))["changes"], [], batch["batch_id"])
+        self.assertEqual(current, before)
+        return baseline, current, results, oracle, files, rows, manifest
 
-    def test_01_fixture_sequence_failures_and_replays(self):
-        _, history, results, _, _, _, _ = self.check_sequence(build_fixture(), "fixture")
-        self.assertEqual(len(history), 4)
-        current = current_payments(history)
+    def test_fixture_intermediate_totals_failures_and_replays(self):
+        _, current, results, _, _, _, _ = self.check_sequence(build_fixture(), "fixture")
         self.assertEqual(len(current), 3)
         self.assertEqual(sum(row["amount"] for row in current.values()), Decimal("230.00"))
-        self.assertEqual(results["fixture_002_duplicate"]["duplicate_row_count"], 1)
-        self.assertEqual(results["fixture_004_stale"]["stale_version_count"], 1)
-        self.assertEqual(results["fixture_013_normalized_duplicate"]["unchanged_version_count"], 1)
-        for batch in ("fixture_009_conflict_current", "fixture_010_conflict_history"):
-            self.assertEqual(results[batch]["error_codes"], ["CONFLICTING_PAYMENT_VERSION"])
+        self.assertEqual({batch for batch, result in results.items() if result["status"] == "FAILED"}, {
+            "fixture_009_conflict_current", "fixture_011_missing_column"
+        })
+        self.assertEqual(results["fixture_010_conflict_history"]["changes"], [])
 
-    def test_02_default_demo_after_fixture(self):
-        baseline, history, results, oracle, _, _, _ = self.check_sequence(build_demo(DemoConfig()), "demo")
+    def test_default_demo_totals_invalid_reasons_and_replays(self):
+        baseline, current, results, oracle, _, _, _ = self.check_sequence(build_demo(DemoConfig()), "demo")
         self.assertEqual(len(baseline["customers"]), 500)
         self.assertEqual(len(baseline["policies"]), 1000)
-        self.assertEqual(len(current_payments(history)), 10200)
-        self.assertEqual(len(history), 10300)
+        self.assertEqual(len(current), 10200)
         updates = results["demo_002_updates"]
-        self.assertEqual(updates["rejected_row_count"], 14)
-        self.assertEqual(updates["inserted_count"], 200)
-        self.assertEqual(updates["updated_count"], 100)
-        self.assertEqual(updates["duplicate_row_count"], 10)
-        self.assertEqual(updates["unchanged_version_count"], 25)
-        stale = results["demo_003_stale_and_duplicates"]
-        self.assertEqual(stale["stale_version_count"], 100)
-        self.assertEqual(stale["unchanged_version_count"], 10)
+        self.assertEqual(len(updates["rejections"]), 14)
+        self.assertEqual(len(updates["changes"]), 300)
         actual = {json.loads(row["raw_payload"])["payment_id"]: row["reason_codes"] for row in updates["rejections"]}
         expected = {note["payment_id"]: sorted(note["expected_reason_codes"]) for note in oracle["intentional_invalid_rows_in_updates"]}
         self.assertEqual(actual, expected)
 
-    def test_partial_or_mismatched_bronze_is_refused(self):
+    def test_missing_incomplete_or_changed_bronze_is_refused(self):
         _, _, _, _, files, rows, manifest = self.check_sequence(build_fixture(), "fixture")
         batch = manifest["batches"][0]
         selected_files = [file for file in files if file["batch_id"] == batch["batch_id"]]
         selected_rows = [row for row in rows if row["batch_id"] == batch["batch_id"]]
-        self.assertIn("MISSING_OR_AMBIGUOUS_FILE", SILVER["delivery_errors"]([], [], ("payments",), batch, "fixture"))
-        self.assertIn("INCOMPLETE_BRONZE_ROWS", SILVER["delivery_errors"](selected_files, [], ("payments",), batch, "fixture"))
-        changed = copy.deepcopy(selected_rows)
-        changed[0]["source_sha256"] = "different"
-        self.assertIn("BRONZE_DELIVERY_MISMATCH", SILVER["delivery_errors"](selected_files, changed, ("payments",), batch, "fixture"))
+        self.assertIn("MISSING_OR_AMBIGUOUS_FILE", SILVER["delivery_errors"]([], [], ("payments",), batch))
+        self.assertIn("INCOMPLETE_BRONZE_ROWS", SILVER["delivery_errors"](selected_files, [], ("payments",), batch))
+        changed_rows = copy.deepcopy(selected_rows)
+        changed_rows[0]["source_sha256"] = "different"
+        self.assertIn("BRONZE_DELIVERY_MISMATCH", SILVER["delivery_errors"](selected_files, changed_rows, ("payments",), batch))
         changed_batch = copy.deepcopy(batch)
         changed_batch["file"]["sha256"] = "different"
-        self.assertIn("BRONZE_DELIVERY_MISMATCH", SILVER["delivery_errors"](selected_files, selected_rows, ("payments",), changed_batch, "fixture"))
+        self.assertIn("BRONZE_DELIVERY_MISMATCH", SILVER["delivery_errors"](selected_files, selected_rows, ("payments",), changed_batch))
 
 
 if __name__ == "__main__":

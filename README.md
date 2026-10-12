@@ -9,9 +9,9 @@ segment in Power BI.
 
 Python source files → Databricks bronze → silver → gold → Power BI
 
-Source generation, file inspection, and bronze ingestion are implemented.
-Silver validation, payment-version handling, gold tables, and the Power BI
-dashboard are next.
+Source generation, file inspection, bronze ingestion and silver validation are
+implemented. The simplified pipeline passes local checks; its Databricks
+verification is pending. Gold tables and the Power BI dashboard follow afterward.
 
 ## Data and bronze ingestion
 
@@ -20,10 +20,10 @@ Later batches contain corrections, duplicates, late payments, and invalid rows.
 A separate fixture has 14 small payment batches for checking these scenarios.
 All data is fictional.
 
-Bronze stores original file bytes, raw row payloads, and run history in Delta
-tables. Invalid values and duplicate source rows remain available, together with
-their source path, batch, checksum, and record number. Identical reruns add no
-raw file or row records. Fixture and demo tables stay separate.
+Bronze stores raw row payloads and file status in Delta tables. Original files in the volume. Invalid values and duplicate source rows retain their
+source path, batch, checksum and record number. Silver validates relationships,
+retains rejections, and keeps the latest accepted payment per ID. Identical reruns
+preserve stored results. New `simple` tables keep the earlier tables intact.
 
 ## Local development
 
@@ -42,6 +42,9 @@ The fixture files are in `data/fixtures/`; the larger demo is generated in
 
 - `00_inspect_sources.py`: checks and extracts the uploaded source archive.
 - `01_ingest_bronze.py`: captures raw deliveries and checks safe reruns.
+- `02_transform_silver.py`: validates references and computes current payments.
+- `03_verify_pipeline.py`: checks final results and replays; see the
+  [silver notes](docs/silver_processing.md) for scope and changed fixture expectations.
 
 The notebooks uses Databricks Free Edition and Unity Catalog volume. Setup and
 verification details are in the [upload notes](docs/databricks_upload.md) and

@@ -1,73 +1,68 @@
 # Bronze ingestion
 
-The source inspection notebook has already succeeded with the fixture at
-`/Volumes/insurance_project/default/insurance_sources`. The existing ZIP and
-extracted files can be reused without regenerating or uploading the sources.
+Import `databricks/01_ingest_bronze.py` as a Python notebook. Keep
+`volume_root = /Volumes/insurance_project/default/insurance_sources` and
+`dataset = fixture`, then run it. Reuse the extracted sources; no regeneration,
+upload, or table reset is needed. Run one execution at a time.
 
-Import `databricks/01_ingest_bronze.py` as a Python notebook. Run the helper and
-widget cells, keep `dataset = fixture` and the existing volume path, then run
-the last cell on serverless compute. The notebook processes the baseline and
-all payment deliveries listed in the manifest. Run one ingestion at a time.
+## Small retained scope
 
-Three managed Delta tables are created in the volume's existing catalog/schema:
+Bronze reads the customer CSV, policy JSON array, and payment CSV deliveries in
+`manifest.json`. It checks file structure, required reporting columns, checksums,
+and declared row counts. It does not clean business values or deduplicate rows.
+Additional columns remain in the raw payload and are ignored by Silver.
 
-- `insurance_project.default.insurance_fixture_bronze_files`: exact file bytes,
-  checksums, declared batch time, structural failures, and schema warnings.
-- `insurance_project.default.insurance_fixture_bronze_rows`: parsed raw payloads
-  with source path, checksum, entity, batch, and one-based record number.
-- `insurance_project.default.insurance_fixture_bronze_runs`: each execution's
-  status, timestamps, input row count, newly stored row count, and failures.
+Two new Delta tables use the prefix `insurance_fixture_simple_bronze_` in the
+volume's existing catalog/schema:
 
-The record number counts CSV data records after the header or objects in the JSON
-array. It is not a physical line number; a quoted CSV field can span lines.
-`raw_payload` preserves strings, blanks, whitespace, and JSON nulls. The file
-table preserves the original encoding, header, quoting, and file formatting.
+| Suffix | Contents |
+| --- | --- |
+| `files` | Source path/hash, batch ID/time, parsed row count, file status, errors |
+| `rows` | Original field values as JSON, source path/hash, batch ID/time, record number, first ingestion time |
 
-Identical rows at different source positions remain separate bronze rows.
-Identical reruns add no file or row records and preserve the first ingestion
-time and run ID. Run history gains one entry. This uses an insert-only
-[Delta MERGE](https://docs.databricks.com/aws/en/delta/merge).
-Changing a stored delivery's contents, file path, checksum declaration, row-count
-declaration, or batch time fails before the merges. A corrected delivery needs
-a new batch ID. If a write is interrupted, rerun the same immutable inputs;
-existing records are retained and missing records can be inserted.
+The record number is one-based: CSV data records after the header or objects in
+the JSON array. It is not a physical line number. Strings, blanks, whitespace,
+JSON nulls, unused fields, and duplicate source positions survive ingestion.
+Exact file bytes stay in the volume; Bronze no longer stores a second byte copy.
 
-File contract failures stay visible in the file table. Parseable rows from those
-files are retained for audit, but a later silver notebook must skip the failed
-batch. Unparseable files retain their original bytes without manufacturing rows.
-Missing or unreadable files stop ingestion and produce a failed run entry.
-Other independent deliveries can be captured together with a failed file.
-Business validation and payment-version conflicts belong to silver.
-`expected_outcomes.json` is never read by this notebook.
+## Reruns and failures
 
-## Fixture checks
+An insert-only Delta merge uses `(batch_id, entity)` for files and adds
+`source_row_number` for rows. Identical reruns add no records and preserve first
+ingestion times. Changed bytes, source path, declared batch time, parsed count,
+or file status/errors for a stored delivery are blocked. Corrections require a
+new batch ID. Run the same inputs again if a write is interrupted.
 
-On a fresh fixture run, the summary should report:
+Parseable rows from a failed file remain in Bronze. Unparseable files produce a
+failed file record with no invented rows; their bytes remain at the source path.
+Silver skips payment deliveries with failed files. Missing or unreadable files
+stop preparation before any ingestion writes. Operational exceptions appear in
+the notebook output; there is no persistent run-history table.
+
+Only the fields used by Silver are required. Policy start/end dates are preserved
+as raw fields but are no longer required or validated for this reporting scope.
+Repeated JSON field names and malformed CSV records still fail structural checks.
+`expected_outcomes.json` is never read by processing.
+
+## Fixture acceptance
+
+A first run into the **new** tables should report:
 
 ```text
-COMPLETED_WITH_FILE_FAILURES: 17 raw rows, 17 newly stored.
+Bronze: 17 raw rows, 17 newly stored; failed files: 1.
 ```
 
-There should be 16 file records: one customer file, one policy file, and 14 payment
-files. The 17 raw rows are one customer, one policy, and 15 payment records.
-Only `fixture_011_missing_column` should have file status `FAILED`, with
-`MISSING_REQUIRED_COLUMN`. The header-only `fixture_012_empty` is `READY` with
-zero records. Payment-version conflicts are retained as raw data at this stage.
+Expect 16 files: two reference files and 14 payment files. The 17 raw rows are one
+customer, one policy, and 15 payments. Only `fixture_011_missing_column` fails,
+with `MISSING_REQUIRED_COLUMN`. `fixture_012_empty` is ready with zero rows.
+A second identical run reports `0 newly stored`.
 
-The notebook compares stored payloads with parsed inputs, then repeats both merges
-and checks that file records, row records, and first-ingestion metadata stay
-unchanged. Running the last cell again should report `0 newly stored`.
-The table previews should retain `12.345`, `-10.00`, the two copies in
-`fixture_002_duplicate`, and the padded strings in
-`fixture_013_normalized_duplicate`.
+[The separate verification notebook](silver_processing.md#verification) compares
+stored payloads and file identities with the sources and checks complete stored
+records before/after replay, including timestamps. Local tests check the parser
+and delivery identity; PySpark and Delta still require Databricks execution.
 
-Local tests cover parsing and provenance; Delta writes and replay checks need an
-actual Databricks run. Bronze does not calculate the EUR 230.00 acceptance total.
-That check follows silver validation and version handling.
-
-JSON objects with repeated field names fail the file contract, retaining the
-original bytes. Choosing one of those values would lose source information.
-
-The larger demo uses the same notebook with `dataset = demo`, after its own
-inspection run. Its tables use `insurance_demo_bronze_*` names, keeping all
-processing state separate from the fixture.
+The demo uses `dataset = demo` and `insurance_demo_simple_bronze_*` tables.
+All earlier `insurance_<dataset>_bronze_*` tables remain untouched. Byte-copy
+storage, schema-warning history, fingerprints of manifest declarations, and
+operational run history are deliberately outside the reduced implementation.
