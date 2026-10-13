@@ -1,25 +1,22 @@
 # Silver validation and current payments
 
-Import `databricks/02_transform_silver.py` as a Python notebook, after running
-Bronze. Use the existing volume and `dataset = fixture`. There is no `mode`
-widget: processing and acceptance verification are separate notebooks.
-All records and domain rules are synthetic project assumptions.
+Notebook `02_transform_silver.py` validates Bronze records, retains rejections,
+and stores the latest accepted payment per ID. Processing and acceptance
+verification are separate notebooks. All records and domain rules are synthetic
+project assumptions.
 
-## Processing flow
+## Processing model
 
-1. Read the complete Bronze delivery sequence in manifest order.
-2. Validate customers, then policies against accepted customers.
-3. Validate each payment batch against accepted policies. Keep an in-memory
-   dictionary containing the latest accepted row for each payment ID.
-4. Retain rejected rows with their original payload, source location, and reasons.
-5. Merge the final current payments into one Delta table.
+Silver reads the complete Bronze delivery sequence in manifest order. Customers
+are validated first, followed by policies against accepted customers. Payment
+batches are then validated against accepted policies. An in-memory dictionary
+holds the latest accepted payment per ID, and the final state is merged into
+Delta tables.
 
-Every run recomputes the small sample from its complete source sequence. This is
-an intentional tradeoff: it avoids a batch ledger, baseline recovery protocol,
-and accepted-version history. Keep all deliveries in the manifest, in their
-original order; append new deliveries rather than removing or reordering them.
-It is not a scalable incremental processing design. Python validation collects
-this sample on the driver. Run one execution at a time.
+Each execution recomputes the sequence from its complete history. The manifest
+history is ordered and append-only. This design avoids a batch ledger and
+accepted-version history, but driver-side Python validation limits scalability.
+The processing model supports one execution at a time.
 
 ## Fields and validation
 
@@ -29,121 +26,102 @@ this sample on the driver. Run one execution at a time.
 | Policies | `policy_id`, `customer_id`, `product_code` |
 | Payments | `payment_id`, `policy_id`, `payment_date`, `amount`, `currency`, `source_updated_at` |
 
-Trim surrounding whitespace. Preserve ID case and leading zeros. Required values
-must be nonblank strings. Regions, segments, and fictional products use the
-existing case-sensitive source vocabulary. Only accepted parents satisfy links;
-an unknown customer or policy is rejected rather than lost through a join.
-Policy start/end dates remain available in Bronze but are not validated or used
-in this reporting model.
+Surrounding whitespace is trimmed. IDs preserve case and leading zeros. Required
+values are nonblank strings. Regions, segments, and fictional products use the
+case-sensitive source vocabulary. Only accepted parents satisfy relationships;
+unknown customers and policies produce rejected rows.
 
 Dates use `YYYY-MM-DD`; update timestamps use `YYYY-MM-DDTHH:MM:SSZ`. Neither may
-exceed the declared batch time, and an update's UTC date cannot precede its payment
-date. These checks use delivery metadata, not today's date.
+exceed the declared batch time, and an update's UTC date cannot precede its
+payment date. Validation uses delivery metadata rather than the current date.
 
-Money uses Python `Decimal` and Delta `DECIMAL(12,2)`. Require positive EUR amounts
-within the decimal range and at most two fractional digits. Reject excess
-precision, malformed amounts, and overflow before conversion; never silently
-round or use floating-point totals.
+Amounts use Python `Decimal` and Delta `DECIMAL(12,2)`. Valid amounts are positive,
+denominated in EUR, within the decimal range, and have at most two fractional
+digits. Excess precision, malformed amounts, and overflow are rejected before
+conversion. Policy start and end dates remain in Bronze, outside this model.
 
 ## Duplicates and corrections
 
 Identical normalized reference IDs collapse to one row. Different retained
-business values for the same reference ID fail reference publication. Existing
-accepted reference records are compared with the incoming baseline before
-merging; changing the accepted baseline requires review and an approved rebuild.
-There is no baseline marker or recovery state machine.
+business values for the same reference ID fail reference publication. A change
+to the accepted reference baseline stops processing.
 
-For valid payments, compare the business payload: policy, payment date, decimal
-amount, and currency. In each batch:
+Payment payload comparisons use policy, payment date, decimal amount, and
+currency. For valid rows:
 
 - Identical `(payment_id, source_updated_at)` versions collapse.
-- Different payloads for the same version within the batch, or against the
-  current version reached so far in the sequence, fail the whole payment batch.
-  Keep conflict rows with `CONFLICTING_PAYMENT_VERSION`; apply no accompanying
-  payment changes from that batch.
-- Otherwise, take the newest valid version per payment ID. Insert an unseen ID
-  or replace its current row only with a newer timestamp.
+- Different payloads for the same version within a batch, or against the current
+  version reached in the sequence, fail the whole payment batch. Conflict rows
+  carry `CONFLICTING_PAYMENT_VERSION`, and no payment changes from that batch
+  are applied.
+- The newest valid version per ID becomes the candidate. An unseen ID is
+  inserted; an existing ID is updated only by a newer timestamp.
 - Equal versions are no-ops. Older versions are ignored, including different
-  payloads for versions older than the current one. No historical conflict check
-  is claimed.
-- Reject invalid corrections without replacing accepted rows. Other valid rows
-  can continue when there is no batch conflict or file failure.
+  payloads for versions older than the current one.
+- Invalid corrections are rejected without replacing accepted rows. Other valid
+  rows continue when the batch has no version conflict or file failure.
 
-Late receipts are allowed. Missing rows in an incremental file never mean
-cancellation or deletion. Corrections may change amount, policy, or payment date
-if the new row passes validation; the payment ID stays the same.
+Late receipts are allowed. Missing rows in an incremental file do not imply
+deletion. Valid corrections may change amount, policy, or payment date while
+retaining the payment ID.
 
-Recomputing from the complete sequence preserves the original batch decisions
-on rerun even after later corrections. One final payment merge inserts new IDs
-and updates only newer timestamps; equal timestamps preserve existing metadata.
-Reference and rejection merges are insert-only. These separate table writes are
-not one transaction. An operational failure can be retried with the same sources;
-there is no automated repair of edited tables or changed source history.
+Identical reruns preserve payment state and audit metadata. Reference and
+rejection merges are insert-only; payment merges update only newer timestamps.
+Separate table writes are not one transaction. An interrupted execution can be
+retried with the same sources; edited tables and changed source history have no
+automated repair.
 
-## Tables and counts
+## Tables and batch summaries
 
-The new prefix is `insurance_fixture_simple_silver_` (or
-`insurance_demo_simple_silver_`) in the volume's catalog/schema:
+The Delta table prefix is
+`<catalog>.<schema>.insurance_<dataset>_simple_silver_`:
 
 | Suffix | Contents |
 | --- | --- |
 | `customers` | Accepted customers and source provenance |
-| `policies` | Accepted policy/customer/product relationships and provenance |
+| `policies` | Accepted policy, customer, and product relationships with provenance |
 | `payments` | One current accepted row per payment ID, with provenance |
-| `rejections` | Original payload, provenance, and sorted reason codes |
+| `rejections` | Original payload, provenance, and reason codes |
 
-There is no versions table, current-payment view, baseline marker, or run table.
-Earlier `insurance_<dataset>_silver_*` tables and views are left intact.
+Batch summaries contain status, error codes, input row count, and rejected row
+count. Each invalid or conflicting source row counts once, even with several
+reasons. A valid row blocked by a batch conflict remains in Bronze and is not
+counted as rejected. File failures have no row-level Silver rejection.
 
-The notebook displays status/error codes, input row count, and rejected row count
-per payment batch. Rejected counts include each invalid or conflicting source row once,
-even with several reasons. An accompanying valid row blocked by a batch conflict
-stays in Bronze but is not counted as rejected. File failures have no row-level
-Silver rejection. Rejections use `(batch_id, entity, source_row_number)` so replay
-does not duplicate them. Duplicate, stale, superseded, inserted, and updated
-counters are deferred; the summaries are not persistent operational history.
+Rejections use `(batch_id, entity, source_row_number)` so replay does not duplicate
+them. Batch summaries are displayed rather than stored as operational history.
+Historical-version checks and detailed processing counters are outside this scope.
 
 ## Verification
 
-Import `01_ingest_bronze.py`, `02_transform_silver.py`, and
-`03_verify_pipeline.py` into the **same Databricks workspace folder**. Run notebook
-03 with its fixture defaults. Its two `%run` cells execute Bronze and Silver;
-its remaining cells check final results and replay both processing functions.
-Databricks documents this inline execution in
-[notebook workflows](https://docs.databricks.com/aws/en/notebooks/notebook-workflows).
-The existing volume is the default. The notebook creates only the new `simple`
-tables; it does not reset or migrate the earlier tables.
+Notebook `03_verify_pipeline.py` executes Bronze and Silver through relative
+`%run` references, checks final results against the selected dataset's acceptance
+cases, and compares all six tables before and after replay. Checks cover payment
+totals, monthly amounts, batch outcomes, rejection reasons, key uniqueness,
+relationships, and unchanged audit metadata.
 
-Expected fixture outcome:
+Local tests also cover intermediate batch states and failed-batch isolation.
+They exercise the Python planning functions; Spark and Delta execution are
+verified in Databricks. `expected_outcomes.json` is verification input only.
 
-- 3 current payments, EUR 230.00 total.
-- August EUR 50.00; September EUR 180.00, grouped by **payment date**.
-- Only batches 009 and 011 fail. Batch 009 blocks its accompanying new payment.
-- Batch 010 succeeds as a stale no-op; its historical conflict check was removed.
-- Four stored rejection rows: three invalid rows and one current-version conflict.
-- Replay preserves all six tables, including first ingestion/processing metadata.
+The fixture oracle includes a historical-conflict scenario outside Silver's
+current-version scope. Notebook 03 treats it as a stale no-op and includes
+current-version conflict rows in rejected-row counts.
 
-Success prints `Verified fixture: final state and identical replays.` This does
-not claim to verify each intermediate state in Databricks. Local tests separately
-check intermediate totals, failed-batch isolation, validation, and replays using
-the same Python planning functions; they do not execute PySpark or Delta.
+| Dataset | Customers | Policies | Current payments | Rejected rows | Total EUR |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Fixture | 1 | 1 | 3 | 4 | 230.00 |
+| Default demo | 500 | 1,000 | 10,200 | 14 | 1,377,893.03 |
 
-The uploaded `expected_outcomes.json` still describes the original source fixture.
-Only notebook 03 adapts its expectations for batch 010 and the conflict-row count.
-It reads the oracle to assert produced results, never to build pipeline output.
-The generator, checked-in source files, and uploaded bundles remain unchanged.
+The fixture groups to August EUR 50.00 and September EUR 180.00 by payment date.
+Batches 009 and 011 fail; batch 009 blocks its accompanying new payment.
+Batch 010 succeeds as a stale no-op. Identical replay preserves stored records
+and timestamps.
 
-The default demo passes locally with 500 customers, 1,000 policies, 10,200 current
-payments, and 14 rejected update rows. Actual execution of the **simplified**
-notebooks in Databricks is pending for both datasets. Earlier successful
-Databricks outputs verify the previous implementation only.
+The default demo passed final-state and identical-replay verification in
+Databricks on 2026-10-13. Both datasets pass local tests.
 
-After the fixture is verified, the demo can use the same notebook: change
-`$dataset="fixture"` to `$dataset="demo"` in both `%run` cells before running it.
-No regeneration or upload is needed for the existing extracted demo sources.
-
-The [Gold notebook](gold_reporting.md) sums each current payment once and groups
-months by payment date using Spark SQL. Run it after Silver for the selected
-dataset; Power BI follows the Gold checks. Refunds, reversals,
-invoices, overdue balances, policy amendments, historical reference dimensions,
-Azure deployment, and notebook conversion remain outside this milestone.
+[Gold reporting](gold_reporting.md) aggregates the accepted Silver records.
+The reporting model covers positive received EUR payments. Refunds, invoices,
+overdue balances, policy amendments, and historical reference dimensions are
+outside its scope.

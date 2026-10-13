@@ -1,68 +1,68 @@
 # Bronze ingestion
 
-Import `databricks/01_ingest_bronze.py` as a Python notebook. Keep
-`volume_root = /Volumes/insurance_project/default/insurance_sources` and
-`dataset = fixture`, then run it. Reuse the extracted sources; no regeneration,
-upload, or table reset is needed. Run one execution at a time.
+Notebook `01_ingest_bronze.py` captures raw customer, policy, and payment
+deliveries from the extracted source directory. The `volume_root` and `dataset`
+parameters identify the [source storage](databricks_upload.md) and table namespace.
 
-## Small retained scope
+## Source handling
 
-Bronze reads the customer CSV, policy JSON array, and payment CSV deliveries in
-`manifest.json`. It checks file structure, required reporting columns, checksums,
-and declared row counts. It does not clean business values or deduplicate rows.
-Additional columns remain in the raw payload and are ignored by Silver.
+Bronze reads the customer CSV, policy JSON array, and payment CSV files listed in
+`manifest.json`. Parsing runs in Python on the driver for this small synthetic
+dataset. File checks cover structure, required reporting columns, checksums, and
+declared row counts. Business validation belongs to Silver.
 
-Two new Delta tables use the prefix `insurance_fixture_simple_bronze_` in the
-volume's existing catalog/schema:
+Raw payloads preserve source values, whitespace, blanks, JSON nulls, additional
+fields, and duplicate source rows. Policy start and end dates remain raw fields
+outside the reporting model. Repeated JSON field names and malformed CSV records
+fail structural checks. `expected_outcomes.json` is used only for verification.
+
+## Tables
+
+The Delta table prefix is
+`<catalog>.<schema>.insurance_<dataset>_simple_bronze_`:
 
 | Suffix | Contents |
 | --- | --- |
-| `files` | Source path/hash, batch ID/time, parsed row count, file status, errors |
-| `rows` | Original field values as JSON, source path/hash, batch ID/time, record number, first ingestion time |
+| `files` | Source path and checksum, batch ID and time, parsed row count, file status, and errors |
+| `rows` | Raw JSON payload, source path and checksum, batch ID and time, record number, and first ingestion time |
 
-The record number is one-based: CSV data records after the header or objects in
-the JSON array. It is not a physical line number. Strings, blanks, whitespace,
-JSON nulls, unused fields, and duplicate source positions survive ingestion.
-Exact file bytes stay in the volume; Bronze no longer stores a second byte copy.
+Record numbers are one-based CSV data records after the header or objects in the
+JSON array. They identify source positions rather than physical lines. Original
+file bytes remain in the volume.
 
 ## Reruns and failures
 
-An insert-only Delta merge uses `(batch_id, entity)` for files and adds
-`source_row_number` for rows. Identical reruns add no records and preserve first
-ingestion times. Changed bytes, source path, declared batch time, parsed count,
-or file status/errors for a stored delivery are blocked. Corrections require a
-new batch ID. Run the same inputs again if a write is interrupted.
+Insert-only Delta merges use `(batch_id, entity)` for files and
+`(batch_id, entity, source_row_number)` for rows. Identical reruns add no records
+and preserve ingestion timestamps.
 
-Parseable rows from a failed file remain in Bronze. Unparseable files produce a
-failed file record with no invented rows; their bytes remain at the source path.
-Silver skips payment deliveries with failed files. Missing or unreadable files
-stop preparation before any ingestion writes. Operational exceptions appear in
-the notebook output; there is no persistent run-history table.
+A batch ID identifies an immutable delivery. Changes to its source bytes, path,
+declared batch time, parsed count, or file status and errors block ingestion.
+Corrections have a new batch ID. An interrupted write can be retried with the same
+inputs. The processing model supports one ingestion execution at a time.
 
-Only the fields used by Silver are required. Policy start/end dates are preserved
-as raw fields but are no longer required or validated for this reporting scope.
-Repeated JSON field names and malformed CSV records still fail structural checks.
-`expected_outcomes.json` is never read by processing.
+Files have `READY` or `FAILED` status. Parseable rows from a failed file remain in
+Bronze. An unparseable file has a failed file record and no parsed rows. Silver
+skips failed payment deliveries. Missing or unreadable source files stop
+preparation before ingestion writes.
 
-## Fixture acceptance
+Operational exceptions appear in notebook output. Persistent run history and
+schema-warning history are outside the current scope.
 
-A first run into the **new** tables should report:
+## Fixture results
+
+The fixture contains 16 files: two reference files and 14 payment files. Its
+17 raw rows are one customer, one policy, and 15 payments. The first load reports:
 
 ```text
 Bronze: 17 raw rows, 17 newly stored; failed files: 1.
 ```
 
-Expect 16 files: two reference files and 14 payment files. The 17 raw rows are one
-customer, one policy, and 15 payments. Only `fixture_011_missing_column` fails,
-with `MISSING_REQUIRED_COLUMN`. `fixture_012_empty` is ready with zero rows.
-A second identical run reports `0 newly stored`.
+Only `fixture_011_missing_column` fails, with `MISSING_REQUIRED_COLUMN`.
+`fixture_012_empty` is ready with zero rows. An identical replay reports
+`0 newly stored`.
 
-[The separate verification notebook](silver_processing.md#verification) compares
-stored payloads and file identities with the sources and checks complete stored
-records before/after replay, including timestamps. Local tests check the parser
-and delivery identity; PySpark and Delta still require Databricks execution.
-
-The demo uses `dataset = demo` and `insurance_demo_simple_bronze_*` tables.
-All earlier `insurance_<dataset>_bronze_*` tables remain untouched. Byte-copy
-storage, schema-warning history, fingerprints of manifest declarations, and
-operational run history are deliberately outside the reduced implementation.
+[Notebook 03](silver_processing.md#verification) compares stored payloads and
+file identities with the sources and checks complete records before and after
+replay, including timestamps. Local tests cover parsing and delivery identity;
+Databricks verification covers Spark and Delta execution.
