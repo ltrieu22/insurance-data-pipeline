@@ -1,8 +1,8 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # Bronze: ingest raw deliveries
-# MAGIC Reuse the extracted fixture/demo files. Run one ingestion at a time.
-# MAGIC The `simple` tables keep the earlier implementation's tables intact.
+# MAGIC # Bronze: raw deliveries
+# MAGIC Captures raw rows, file status, and provenance from extracted sources.
+# MAGIC Identical replays preserve stored records. Ingestion supports one execution at a time.
 
 # COMMAND ----------
 

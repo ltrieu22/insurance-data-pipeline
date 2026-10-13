@@ -1,8 +1,8 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # Silver: clean references and current payments
+# MAGIC # Silver: reference data and current payments
 # MAGIC Validation uses Python on the driver for this small synthetic sample.
-# MAGIC Run one execution at a time. Acceptance checks are in `03_verify_pipeline`.
+# MAGIC Processing supports one execution at a time. Acceptance checks are in `03_verify_pipeline`.
 
 # COMMAND ----------
 

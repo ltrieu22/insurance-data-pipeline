@@ -1,7 +1,7 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # Inspect source files
-# MAGIC Upload the source ZIP to a Unity Catalog volume and set the widgets below.
+# MAGIC # Source file inspection
+# MAGIC Checks and extracts source archives in a Unity Catalog volume.
 
 # COMMAND ----------
 

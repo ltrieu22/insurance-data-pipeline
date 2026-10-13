@@ -142,7 +142,8 @@ After the fixture is verified, the demo can use the same notebook: change
 `$dataset="fixture"` to `$dataset="demo"` in both `%run` cells before running it.
 No regeneration or upload is needed for the existing extracted demo sources.
 
-Gold and Power BI wait until this milestone is verified in Databricks. Gold will
-sum each current payment once and group months by payment date. Refunds, reversals,
+The [Gold notebook](gold_reporting.md) sums each current payment once and groups
+months by payment date using Spark SQL. Run it after Silver for the selected
+dataset; Power BI follows the Gold checks. Refunds, reversals,
 invoices, overdue balances, policy amendments, historical reference dimensions,
 Azure deployment, and notebook conversion remain outside this milestone.

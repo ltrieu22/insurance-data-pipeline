@@ -9,9 +9,9 @@ segment in Power BI.
 
 Python source files → Databricks bronze → silver → gold → Power BI
 
-Source generation, file inspection, bronze ingestion and silver validation are
-implemented. The simplified pipeline passes local checks; its Databricks
-verification is pending. Gold tables and the Power BI dashboard follow afterward.
+Source generation, file inspection, bronze ingestion, silver validation and a
+Spark SQL gold notebook are implemented. Local checks pass. Execution of the new
+gold notebook in Databricks,Power BI next.
 
 ## Data and bronze ingestion
 
@@ -45,6 +45,8 @@ The fixture files are in `data/fixtures/`; the larger demo is generated in
 - `02_transform_silver.py`: validates references and computes current payments.
 - `03_verify_pipeline.py`: checks final results and replays; see the
   [silver notes](docs/silver_processing.md) for scope and changed fixture expectations.
+- `04_build_gold.py`: joins current Silver records into one monthly reporting
+  table. [gold notes](docs/gold_reporting.md) for fields and checks.
 
 The notebooks uses Databricks Free Edition and Unity Catalog volume. Setup and
 verification details are in the [upload notes](docs/databricks_upload.md) and

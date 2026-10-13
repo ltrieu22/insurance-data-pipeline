@@ -1,10 +1,8 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # Acceptance: final state and identical replays
-# MAGIC Import notebooks 01, 02, and 03 into the same workspace folder.
-# MAGIC The two `%run` cells process the fixture first. For the demo, change
-# MAGIC `$dataset="fixture"` to `$dataset="demo"` in both cells.
-# MAGIC This checks final state and replays; local tests check intermediate states.
+# MAGIC Verifies Bronze and Silver results and identical replays.
+# MAGIC Local tests cover intermediate batch states.
 
 # COMMAND ----------
 
@@ -25,11 +23,11 @@ from pathlib import Path
 def reduced_expectations(oracle, dataset):
     expected = oracle["after_batches"]
     if dataset == "fixture":
-        # Keep the uploaded source bundle unchanged; its oracle describes the old scope.
+        # The source oracle includes historical conflict checks outside the current scope.
         expected["fixture_010_conflict_history"].update(
             status="SUCCESS", expected_reason_codes=[]
         )
-        # The simpler rejection count includes the conflicting source row.
+        # Rejected-row counts include current-version conflict rows.
         expected["fixture_009_conflict_current"]["rejected_row_count_in_this_batch"] = 1
     return expected
 

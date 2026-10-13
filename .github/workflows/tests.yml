@@ -21,4 +21,4 @@ jobs:
       - name: Run tests
         run: python -m unittest discover -s tests
       - name: Check notebook syntax
-        run: python -m py_compile databricks/00_inspect_sources.py databricks/01_ingest_bronze.py databricks/02_transform_silver.py databricks/03_verify_pipeline.py
+        run: python -m py_compile databricks/00_inspect_sources.py databricks/01_ingest_bronze.py databricks/02_transform_silver.py databricks/03_verify_pipeline.py databricks/04_build_gold.py
