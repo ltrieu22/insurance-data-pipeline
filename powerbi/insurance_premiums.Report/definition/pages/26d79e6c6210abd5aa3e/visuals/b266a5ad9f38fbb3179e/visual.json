@@ -1,0 +1,514 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.13.0/schema.json",
+  "name": "b266a5ad9f38fbb3179e",
+  "position": {
+    "x": 8.75,
+    "y": 570,
+    "z": 2000,
+    "height": 510,
+    "width": 1021.25,
+    "tabOrder": 2000
+  },
+  "visual": {
+    "visualType": "scatterChart",
+    "query": {
+      "queryState": {
+        "Category": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Monthly premiums"
+                    }
+                  },
+                  "Property": "Reporting group"
+                }
+              },
+              "queryRef": "Monthly premiums.Reporting group",
+              "nativeQueryRef": "Reporting group",
+              "active": true
+            }
+          ]
+        },
+        "Series": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Monthly premiums"
+                    }
+                  },
+                  "Property": "customer_segment"
+                }
+              },
+              "queryRef": "Monthly premiums.customer_segment",
+              "nativeQueryRef": "customer_segment"
+            }
+          ]
+        },
+        "Tooltips": {
+          "projections": [
+            {
+              "field": {
+                "Aggregation": {
+                  "Expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Monthly premiums"
+                        }
+                      },
+                      "Property": "region"
+                    }
+                  },
+                  "Function": 3
+                }
+              },
+              "queryRef": "Min(Monthly premiums.region)",
+              "nativeQueryRef": "First region"
+            },
+            {
+              "field": {
+                "Aggregation": {
+                  "Expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Monthly premiums"
+                        }
+                      },
+                      "Property": "product_code"
+                    }
+                  },
+                  "Function": 3
+                }
+              },
+              "queryRef": "Min(Monthly premiums.product_code)",
+              "nativeQueryRef": "First product_code"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Monthly premiums"
+                    }
+                  },
+                  "Property": "Average payment EUR"
+                }
+              },
+              "queryRef": "Monthly premiums.Average payment EUR",
+              "nativeQueryRef": "Average payment EUR"
+            },
+            {
+              "field": {
+                "Aggregation": {
+                  "Expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Monthly premiums"
+                        }
+                      },
+                      "Property": "payment_month"
+                    }
+                  },
+                  "Function": 3
+                }
+              },
+              "queryRef": "Min(Monthly premiums.payment_month)",
+              "nativeQueryRef": "Earliest payment_month"
+            }
+          ]
+        },
+        "X": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Monthly premiums"
+                    }
+                  },
+                  "Property": "Total payments"
+                }
+              },
+              "queryRef": "Monthly premiums.Total payments",
+              "nativeQueryRef": "Total payments",
+              "active": true
+            }
+          ]
+        },
+        "Y": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Monthly premiums"
+                    }
+                  },
+                  "Property": "Total premium EUR"
+                }
+              },
+              "queryRef": "Monthly premiums.Total premium EUR",
+              "nativeQueryRef": "Total premium EUR"
+            }
+          ]
+        }
+      }
+    },
+    "objects": {
+      "categoryAxis": [
+        {
+          "properties": {
+            "start": {
+              "expr": {
+                "Literal": {
+                  "Value": "0D"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "valueAxis": [
+        {
+          "properties": {
+            "start": {
+              "expr": {
+                "Literal": {
+                  "Value": "0D"
+                }
+              }
+            },
+            "labelDisplayUnits": {
+              "expr": {
+                "Literal": {
+                  "Value": "1000D"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "bubbles": [
+        {
+          "properties": {
+            "markerShape": {
+              "expr": {
+                "Literal": {
+                  "Value": "'square'"
+                }
+              }
+            }
+          },
+          "selector": {
+            "data": [
+              {
+                "scopeId": {
+                  "Comparison": {
+                    "ComparisonKind": 0,
+                    "Left": {
+                      "Column": {
+                        "Expression": {
+                          "SourceRef": {
+                            "Entity": "Monthly premiums"
+                          }
+                        },
+                        "Property": "customer_segment"
+                      }
+                    },
+                    "Right": {
+                      "Literal": {
+                        "Value": "'PRIORITY'"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "dataPoint": [
+        {
+          "properties": {
+            "fill": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#C499CA'"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "selector": {
+            "data": [
+              {
+                "scopeId": {
+                  "Comparison": {
+                    "ComparisonKind": 0,
+                    "Left": {
+                      "Column": {
+                        "Expression": {
+                          "SourceRef": {
+                            "Entity": "Monthly premiums"
+                          }
+                        },
+                        "Property": "customer_segment"
+                      }
+                    },
+                    "Right": {
+                      "Literal": {
+                        "Value": "'PRIORITY'"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "properties": {
+            "fill": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "ThemeDataColor": {
+                      "ColorId": 0,
+                      "Percent": -0.3
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "selector": {
+            "data": [
+              {
+                "scopeId": {
+                  "Comparison": {
+                    "ComparisonKind": 0,
+                    "Left": {
+                      "Column": {
+                        "Expression": {
+                          "SourceRef": {
+                            "Entity": "Monthly premiums"
+                          }
+                        },
+                        "Property": "customer_segment"
+                      }
+                    },
+                    "Right": {
+                      "Literal": {
+                        "Value": "'STANDARD'"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "trend": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "displayName": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Trend line 1'"
+                }
+              }
+            },
+            "transparency": {
+              "expr": {
+                "Literal": {
+                  "Value": "30D"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Payment volume and received premiums'"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "subTitle": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "79194a49610b374b2540",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Monthly premiums"
+              }
+            },
+            "Property": "Reporting group"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "0a81bbcb253d1c5d292d",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Monthly premiums"
+              }
+            },
+            "Property": "customer_segment"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "236573a491eb82410fc4",
+        "field": {
+          "Aggregation": {
+            "Expression": {
+              "Column": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "Monthly premiums"
+                  }
+                },
+                "Property": "region"
+              }
+            },
+            "Function": 3
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "14d24b674fe3f8c0ec93",
+        "field": {
+          "Aggregation": {
+            "Expression": {
+              "Column": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "Monthly premiums"
+                  }
+                },
+                "Property": "product_code"
+              }
+            },
+            "Function": 3
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "72f55f714f4b12234e24",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Monthly premiums"
+              }
+            },
+            "Property": "Average payment EUR"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "f544be598281f59c4ff6",
+        "field": {
+          "Aggregation": {
+            "Expression": {
+              "Column": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "Monthly premiums"
+                  }
+                },
+                "Property": "payment_month"
+              }
+            },
+            "Function": 3
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "91160db10af5fc2325d2",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Monthly premiums"
+              }
+            },
+            "Property": "Total payments"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "5755e472748287befcea",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Monthly premiums"
+              }
+            },
+            "Property": "Total premium EUR"
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
+  }
+}

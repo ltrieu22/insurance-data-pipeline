@@ -1,0 +1,12 @@
+DEFINE
+    MEASURE 'Monthly premiums'[Total premium EUR] = SUM('Monthly premiums'[total_premium_eur])
+    MEASURE 'Monthly premiums'[Total payments] = SUM('Monthly premiums'[payment_count])
+EVALUATE
+    ROW(
+        "Reporting rows", COUNTROWS('Monthly premiums'),
+        "Payment months", DISTINCTCOUNT('Monthly premiums'[payment_month]),
+        "Total payments", [Total payments],
+        "Total premium EUR", [Total premium EUR],
+        "First month", MIN('Monthly premiums'[payment_month]),
+        "Last month", MAX('Monthly premiums'[payment_month])
+    )

@@ -1,0 +1,5 @@
+relationship 00c28bcc-8469-41df-b313-0b57493e6ddd
+	joinOnDateBehavior: datePartOnly
+	fromColumn: 'Monthly premiums'.payment_month
+	toColumn: LocalDateTable_99c604f7-0030-4f19-9e04-9e970ff65c5a.Date
+

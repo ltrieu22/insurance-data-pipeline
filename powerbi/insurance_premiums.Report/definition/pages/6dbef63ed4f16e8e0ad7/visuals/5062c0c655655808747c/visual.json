@@ -1,0 +1,193 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.13.0/schema.json",
+  "name": "5062c0c655655808747c",
+  "position": {
+    "x": 960,
+    "y": 192.5,
+    "z": 3000,
+    "height": 575,
+    "width": 960,
+    "tabOrder": 3000
+  },
+  "visual": {
+    "visualType": "clusteredBarChart",
+    "query": {
+      "queryState": {
+        "Category": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Monthly premiums"
+                    }
+                  },
+                  "Property": "product_code"
+                }
+              },
+              "queryRef": "Monthly premiums.product_code",
+              "nativeQueryRef": "product_code",
+              "active": true
+            }
+          ]
+        },
+        "Y": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Monthly premiums"
+                    }
+                  },
+                  "Property": "Total premium EUR"
+                }
+              },
+              "queryRef": "Monthly premiums.Total premium EUR",
+              "nativeQueryRef": "Total premium EUR"
+            }
+          ]
+        }
+      },
+      "sortDefinition": {
+        "sort": [
+          {
+            "field": {
+              "Measure": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "Monthly premiums"
+                  }
+                },
+                "Property": "Total premium EUR"
+              }
+            },
+            "direction": "Descending"
+          }
+        ],
+        "isDefaultSort": true
+      }
+    },
+    "objects": {
+      "dataPoint": [
+        {
+          "properties": {
+            "fill": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#167D82'"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "selector": {
+            "data": [
+              {
+                "scopeId": {
+                  "Comparison": {
+                    "ComparisonKind": 0,
+                    "Left": {
+                      "Column": {
+                        "Expression": {
+                          "SourceRef": {
+                            "Entity": "Monthly premiums"
+                          }
+                        },
+                        "Property": "product_code"
+                      }
+                    },
+                    "Right": {
+                      "Literal": {
+                        "Value": "'LIFE_PLUS'"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "properties": {
+            "fill": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#70BBFF'"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "selector": {
+            "data": [
+              {
+                "scopeId": {
+                  "Comparison": {
+                    "ComparisonKind": 0,
+                    "Left": {
+                      "Column": {
+                        "Expression": {
+                          "SourceRef": {
+                            "Entity": "Monthly premiums"
+                          }
+                        },
+                        "Property": "product_code"
+                      }
+                    },
+                    "Right": {
+                      "Literal": {
+                        "Value": "'LIFE_BASIC'"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "1d79a146e7cfdb4f8e74",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Monthly premiums"
+              }
+            },
+            "Property": "product_code"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "d6d1b0e3e118384dcbf9",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Monthly premiums"
+              }
+            },
+            "Property": "Total premium EUR"
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
+  }
+}

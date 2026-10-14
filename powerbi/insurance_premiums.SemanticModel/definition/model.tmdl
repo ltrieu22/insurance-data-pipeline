@@ -1,0 +1,21 @@
+model Model
+	culture: en-US
+	defaultPowerBIDataSourceVersion: powerBI_V3
+	sourceQueryCulture: en-FI
+	valueFilterBehavior: independent
+	dataAccessOptions
+		legacyRedirects
+		returnErrorValuesAsNull
+
+annotation __PBI_TimeIntelligenceEnabled = 1
+
+annotation PBI_QueryOrder = ["Monthly premiums"]
+
+annotation PBI_ProTooling = ["DaxQueryView_Desktop","DevMode"]
+
+ref table 'Monthly premiums'
+ref table DateTableTemplate_b3266270-22d0-4680-966a-cc09f98a631c
+ref table LocalDateTable_99c604f7-0030-4f19-9e04-9e970ff65c5a
+
+ref cultureInfo en-US
+

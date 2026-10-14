@@ -1,0 +1,200 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.13.0/schema.json",
+  "name": "584b572682cd904e07be",
+  "position": {
+    "x": 0,
+    "y": 0,
+    "z": 7001,
+    "height": 192.5,
+    "width": 1920,
+    "tabOrder": 7001
+  },
+  "visual": {
+    "visualType": "cardVisual",
+    "query": {
+      "queryState": {
+        "Data": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Monthly premiums"
+                    }
+                  },
+                  "Property": "Average payment EUR"
+                }
+              },
+              "queryRef": "Monthly premiums.Average payment EUR",
+              "nativeQueryRef": "Average payment EUR"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Monthly premiums"
+                    }
+                  },
+                  "Property": "Total premium EUR"
+                }
+              },
+              "queryRef": "Monthly premiums.Total premium EUR",
+              "nativeQueryRef": "Total premium EUR"
+            },
+            {
+              "field": {
+                "Aggregation": {
+                  "Expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Monthly premiums"
+                        }
+                      },
+                      "Property": "payment_count"
+                    }
+                  },
+                  "Function": 0
+                }
+              },
+              "queryRef": "Sum(Monthly premiums.payment_count)",
+              "nativeQueryRef": "Sum of payment_count"
+            }
+          ]
+        }
+      },
+      "sortDefinition": {
+        "sort": [
+          {
+            "field": {
+              "Measure": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "Monthly premiums"
+                  }
+                },
+                "Property": "Average payment EUR"
+              }
+            },
+            "direction": "Descending"
+          }
+        ],
+        "isDefaultSort": true
+      }
+    },
+    "objects": {
+      "value": [
+        {
+          "properties": {
+            "labelPrecision": {
+              "expr": {
+                "Literal": {
+                  "Value": "2L"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "Monthly premiums.Average payment EUR"
+          }
+        },
+        {
+          "properties": {
+            "labelPrecision": {
+              "expr": {
+                "Literal": {
+                  "Value": "0L"
+                }
+              }
+            },
+            "labelDisplayUnits": {
+              "expr": {
+                "Literal": {
+                  "Value": "1D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "Monthly premiums.Total premium EUR"
+          }
+        },
+        {
+          "properties": {
+            "labelPrecision": {
+              "expr": {
+                "Literal": {
+                  "Value": "0L"
+                }
+              }
+            },
+            "labelDisplayUnits": {
+              "expr": {
+                "Literal": {
+                  "Value": "1D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "metadata": "Sum(Monthly premiums.payment_count)"
+          }
+        }
+      ]
+    },
+    "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "6d40aae0e4c1634b96e1",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Monthly premiums"
+              }
+            },
+            "Property": "Average payment EUR"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "69f66c28ac3459f0bf15",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Monthly premiums"
+              }
+            },
+            "Property": "Total premium EUR"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "b90562113698c2e17f0c",
+        "field": {
+          "Aggregation": {
+            "Expression": {
+              "Column": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "Monthly premiums"
+                  }
+                },
+                "Property": "payment_count"
+              }
+            },
+            "Function": 0
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
+  }
+}

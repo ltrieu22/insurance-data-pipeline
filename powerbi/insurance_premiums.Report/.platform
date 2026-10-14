@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "Report",
+    "displayName": "insurance_premiums"
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "9bc4b268-cbe8-4673-bc6f-b3dd28eddd9a"
+  }
+}

@@ -1,0 +1,107 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.13.0/schema.json",
+  "name": "3adbfaed3d36f5660841",
+  "position": {
+    "x": 1035,
+    "y": 767.5,
+    "z": 6000,
+    "height": 312.5,
+    "width": 885,
+    "tabOrder": 6000
+  },
+  "visual": {
+    "visualType": "clusteredBarChart",
+    "query": {
+      "queryState": {
+        "Category": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Monthly premiums"
+                    }
+                  },
+                  "Property": "region"
+                }
+              },
+              "queryRef": "Monthly premiums.region",
+              "nativeQueryRef": "region",
+              "active": true
+            }
+          ]
+        },
+        "Y": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Monthly premiums"
+                    }
+                  },
+                  "Property": "Total premium EUR"
+                }
+              },
+              "queryRef": "Monthly premiums.Total premium EUR",
+              "nativeQueryRef": "Total premium EUR"
+            }
+          ]
+        }
+      },
+      "sortDefinition": {
+        "sort": [
+          {
+            "field": {
+              "Measure": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "Monthly premiums"
+                  }
+                },
+                "Property": "Total premium EUR"
+              }
+            },
+            "direction": "Descending"
+          }
+        ],
+        "isDefaultSort": true
+      }
+    },
+    "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "f77cc6b7264810ac065d",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Monthly premiums"
+              }
+            },
+            "Property": "region"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "3e002e2abdbe90d6c79e",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Monthly premiums"
+              }
+            },
+            "Property": "Total premium EUR"
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
+  }
+}

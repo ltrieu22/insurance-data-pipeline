@@ -72,5 +72,30 @@ payment counts aggregate with `SUM(payment_count)`. A count of Gold rows measure
 reporting groups. Unique customer or policy counts and payment-level drill-through
 are outside this monthly model.
 
-The Power BI report is planned. The reporting table supports a CSV import or a
-Databricks connection as its data source.
+Power BI Desktop imports the demo Gold table through a Databricks SQL warehouse
+as `Monthly premiums`. The saved project is
+[`powerbi/insurance_premiums.pbip`](../powerbi/insurance_premiums.pbip).
+Its two report pages provide an overview and deeper analysis; current
+[screenshots and captions](../README.md#power-bi-report) document their appearance.
+
+The numeric measures are:
+
+```dax
+Total premium EUR = SUM('Monthly premiums'[total_premium_eur])
+Total payments = SUM('Monthly premiums'[payment_count])
+Average payment EUR = DIVIDE([Total premium EUR], [Total payments])
+```
+
+Average payment is weighted by payment count in the current filter context,
+including matrix totals. Each scatter point represents a monthly Gold reporting
+group across all four grain dimensions, not an individual payment.
+
+The separate Import check confirmed 144 reporting groups, nine months, 10,200
+payments, and EUR 1,377,893.03. The weighted average payment is EUR 135.09.
+September is partial: 160 accepted payments dated 2 September 2026 total
+EUR 21,854.23; the final declared delivery cutoff is 4 September 2026, 00:00 UTC.
+This coverage does not support interpreting September as a full-month decline.
+
+Cross-page slicer synchronization and final interaction tests remain unconfirmed.
+Power BI Service publication and scheduled refresh are outside the implemented
+scope. The connection uses Import mode.

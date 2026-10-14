@@ -1,0 +1,18 @@
+DEFINE
+    MEASURE 'Monthly premiums'[Total premium EUR] =
+        SUM('Monthly premiums'[total_premium_eur])
+
+    MEASURE 'Monthly premiums'[Total payments] =
+        SUM('Monthly premiums'[payment_count])
+
+    MEASURE 'Monthly premiums'[Average payment EUR] =
+        DIVIDE([Total premium EUR], [Total payments])
+
+EVALUATE
+    ROW(
+        "Reporting rows", COUNTROWS('Monthly premiums'),
+        "Reporting months", DISTINCTCOUNT('Monthly premiums'[payment_month]),
+        "Total payments", [Total payments],
+        "Total premium EUR", [Total premium EUR],
+        "Average payment EUR", [Average payment EUR]
+    )
